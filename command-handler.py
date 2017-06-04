@@ -21,7 +21,7 @@ def handle(event, context):
 # Обработчик команд '/start' и '/help'.
 @bot.message_handler(commands=['start', 'help'])
 def handle_start_help(message):
-    r = []
+    sb = []
     sb.append('/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время, для текущего чата.')
     sb.append('\n')
     sb.append(' -время указывается по UTC.')
@@ -142,7 +142,7 @@ def handle_list(message):
             sb.append(item['message'])
             sb.append('\n')
             
-        if r:
+        if sb:
             bot.send_message(message.chat.id, ''.join(sb))
         else:
             bot.send_message(message.chat.id, 'Оповещения отсутствуют')
