@@ -22,24 +22,24 @@ def handle(event, context):
 @bot.message_handler(commands=['start', 'help'])
 def handle_start_help(message):
     r = []
-    r.append('/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время, для текущего чата.')
-    r.append('\n')
-    r.append(' -время указывается по UTC.')
-    r.append('\n')
-    r.append(' -если текст оповещения отсутствует, будет использоваться сообщение по умолчанию.')
-    r.append('\n')
-    r.append(' -если существует ранее добавленное оповещение в указанное время, оно будет обновлено.')
-    r.append('\n')
-    r.append('\n')
-    r.append('/list - вывести список оповещений для текущего чата.')
-    r.append('\n')
-    r.append('\n')
-    r.append('/remove <ЧЧ:MM> - удалить оповещение в указанное время, для текущего чата.')
-    r.append('\n')
-    r.append('\n')
-    r.append('/removeall - удалить все оповещения для текущего чата.')
+    sb.append('/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время, для текущего чата.')
+    sb.append('\n')
+    sb.append(' -время указывается по UTC.')
+    sb.append('\n')
+    sb.append(' -если текст оповещения отсутствует, будет использоваться сообщение по умолчанию.')
+    sb.append('\n')
+    sb.append(' -если существует ранее добавленное оповещение в указанное время, оно будет обновлено.')
+    sb.append('\n')
+    sb.append('\n')
+    sb.append('/list - вывести список оповещений для текущего чата.')
+    sb.append('\n')
+    sb.append('\n')
+    sb.append('/remove <ЧЧ:MM> - удалить оповещение в указанное время, для текущего чата.')
+    sb.append('\n')
+    sb.append('\n')
+    sb.append('/removeall - удалить все оповещения для текущего чата.')
 
-    bot.send_message(message.chat.id, ''.join(r))
+    bot.send_message(message.chat.id, ''.join(sb))
 
 # Обработчик команд '/add'.
 @bot.message_handler(commands=['add'])
@@ -71,7 +71,7 @@ def handle_add(message):
                 })
             bot.send_message(message.chat.id, 'Ok')
         else:
-            bot.send_message(message.chat.id, 'Не верный формат команды')
+            bot.send_message(message.chat.id, 'Неверный формат команды')
     except Exception as e:
         print(e)
         bot.send_message(message.chat.id, 'Ошибка')
@@ -97,7 +97,7 @@ def handle_remove(message):
                 })
             bot.send_message(message.chat.id, 'Ok')
         else:
-            bot.send_message(message.chat.id, 'Не верный формат команды')
+            bot.send_message(message.chat.id, 'Неверный формат команды')
     except Exception as e:
         print(e)
         bot.send_message(message.chat.id, 'Ошибка')    
@@ -133,17 +133,17 @@ def handle_list(message):
             KeyConditionExpression=Key('chat_id').eq(str(message.chat.id))
         )
         
-        r = []
+        sb = []
         for item in response['Items']:
-            r.append(item['notification_time'][:2])
-            r.append(':')
-            r.append(item['notification_time'][2:])
-            r.append(' - ')
-            r.append(item['message'])
-            r.append('\n')
+            sb.append(item['notification_time'][:2])
+            sb.append(':')
+            sb.append(item['notification_time'][2:])
+            sb.append(' - ')
+            sb.append(item['message'])
+            sb.append('\n')
             
         if r:
-            bot.send_message(message.chat.id, ''.join(r))
+            bot.send_message(message.chat.id, ''.join(sb))
         else:
             bot.send_message(message.chat.id, 'Оповещения отсутствуют')
     except Exception as e:
