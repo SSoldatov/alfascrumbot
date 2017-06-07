@@ -5,7 +5,7 @@ import telebot
 from boto3.dynamodb.conditions import Key
 
 TOKEN = ''
-PRE_NOTIFICATION_OFFSET_MINUTES = 3
+PRE_NOTIFICATION_OFFSET_MINUTES = 1
 
 bot = telebot.TeleBot(TOKEN)
 dynamodb = boto3.resource('dynamodb')
