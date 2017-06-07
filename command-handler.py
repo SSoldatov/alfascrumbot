@@ -1,22 +1,27 @@
+import datetime
 import re
 import time
+import traceback
 
 import boto3
 import telebot
 from boto3.dynamodb.conditions import Key
 
 TOKEN = ''
-DEFAULT_MESSAGE = 'Daily standup meeting'
-MOSCOW_TIME_ZONE_OFFSET = +3
 
-BOT_START_WORK_HOUR = 9
-BOT_END_WORK_HOUR = 19
+PRE_NOTIFICATION_OFFSET_MINUTES = 1
 
+DEFAULT_MESSAGE = 'Daily standup meeting.'
+DEFAULT_PRE_MESSAGE = 'Daily standup meeting will begin in {} minutes.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+
+MOSCOW_TIME_ZONE_OFFSET_HOURS = '+03'
+DEFAULT_TIME_ZONE_OFFSET = MOSCOW_TIME_ZONE_OFFSET_HOURS
+
+NO_NOTIFICATIONS_MESSAGE = 'Оповещения отсутствуют.'
+NO_TIME_ZONE_OFFSET_MESSAGE = 'Часовой пояс не установлен, используется московское время.'
 OK_MESSAGE = 'Ok'
 ERROR_MESSAGE = 'Ошибка'
-WRONG_INPUT_DATA_MESSAGE = 'Неверный формат команды'
-
-BOT_OPENING_HOURS_MESSAGE = 'Часы работы бота ' + str(BOT_START_WORK_HOUR) + ':00 по ' + str(BOT_END_WORK_HOUR) + ':00, время московское.'
+WRONG_INPUT_DATA_MESSAGE = 'Неверный формат команды.'
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -30,14 +35,60 @@ def handle(event, context):
     time.sleep(1.5)
 
 
+# Обработчик команд '/settmz'.
+@bot.message_handler(commands=['settmz'])
+def handle_set_timezone_offset(message):
+    try:
+        pattern_string = "^/.*? ([+-])([01]?[0-9]|2[0-3])$"
+        pattern = re.compile(pattern_string)
+        match_result = pattern.match(message.text)
+        if match_result:
+            time_zone_offset = match_result.group(1) + add_leading_zero(match_result.group(2))
+            table = dynamo_db.Table("timezone")
+            table.put_item(Item={'chat_id': str(message.chat.id), 'time_zone_offset': time_zone_offset})
+            bot.send_message(message.chat.id, OK_MESSAGE)
+        else:
+            bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/showtmz'.
+@bot.message_handler(commands=['showtmz'])
+def handle_show_timezone_offset(message):
+    try:
+        offset = read_offset(message.chat.id)
+        if offset:
+            bot.send_message(message.chat.id, offset)
+        else:
+            bot.send_message(message.chat.id, NO_TIME_ZONE_OFFSET_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
 # Обработчик команд '/start' и '/help'.
 @bot.message_handler(commands=['start', 'help'])
 def handle_start_help(message):
-    text_message = '/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время, для текущего чата.' \
+    text_message = '/settmz <+/-ЧЧ> - указать часовой пояс для текущего чата (смещение от UTC в часах).' \
                    '\n' \
-                   ' -время указывается московское (c 9:00 до 19:00).' \
+                   '\n' \
+                   '/showtmz - показать часовой пояс для текущего чата (смещение от UTC в часах).' \
+                   '\n' \
+                   '\n' \
+                   '/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> <ТЕКСТ ПРЕДВАРИТЕЛЬНОГО ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время,' \
+                   ' для текущего чата.' \
+                   '\n' \
+                   ' -при указании времени используется часовой пояс заданный командой /settmz.' \
+                   '\n' \
+                   ' -если часовой пояс не указан, используется время московское.' \
                    '\n' \
                    ' -если текст оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
+                   '\n' \
+                   ' -если текст предварительного оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
+                   '\n' \
+                   ' -предварительное оповещение будет отправлено за {} минуту до указанного времени.' \
                    '\n' \
                    ' -если существует ранее добавленное оповещение в указанное время, оно будет обновлено.' \
                    '\n' \
@@ -48,7 +99,7 @@ def handle_start_help(message):
                    '/remove <ЧЧ:MM> - удалить оповещение в указанное время, для текущего чата.' \
                    '\n' \
                    '\n' \
-                   '/removeall - удалить все оповещения для текущего чата.'
+                   '/removeall - удалить все оповещения для текущего чата.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
 
     bot.send_message(message.chat.id, text_message)
 
@@ -57,35 +108,39 @@ def handle_start_help(message):
 @bot.message_handler(commands=['add'])
 def handle_add(message):
     try:
-        pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])([+-][0-9][0-9]?)?( (.*))?$"
+        pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])( ([^ ]*))?( ([^ ]*))?$"
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
-            hour = match_result.group(1)
 
-            if not check_input_hour(hour):
-                bot.send_message(message.chat.id, BOT_OPENING_HOURS_MESSAGE)
-                return
+            time_zone_offset = read_offset(message.chat.id)
+            if not time_zone_offset:
+                time_zone_offset = DEFAULT_TIME_ZONE_OFFSET
 
-            hour = normalize_hour(hour)
+            hours = add_leading_zero(hour_to_utc(match_result.group(1), time_zone_offset))
+            minutes = add_leading_zero(match_result.group(2))
 
-            minute = match_result.group(2)
-            message_text = match_result.group(5)
-            chat_id = str(message.chat.id)
-            notification_time = hour + minute
-            notification_id = chat_id + notification_time
-
+            message_text = match_result.group(4)
             if not message_text:
                 message_text = DEFAULT_MESSAGE
 
-            table = dynamo_db.Table("notification")
+            pre_message_text = match_result.group(6)
+            if not pre_message_text:
+                pre_message_text = DEFAULT_PRE_MESSAGE
 
-            table.put_item(Item={'id': notification_id, 'notification_time': hour + minute, 'chat_id': chat_id, 'message': message_text})
+            chat_id = str(message.chat.id)
+            notification_time = hours + minutes
+            notification_id = chat_id + notification_time
+
+            table = dynamo_db.Table("notification")
+            table.put_item(Item={'id': notification_id, 'notification_time': hours + minutes, 'chat_id': chat_id, 'message': message_text,
+                                 'pre_message': pre_message_text})
+
             bot.send_message(message.chat.id, OK_MESSAGE)
         else:
             bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
-    except Exception as e:
-        print(e)
+    except Exception:
+        print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
@@ -97,18 +152,25 @@ def handle_remove(message):
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
-            hour = normalize_hour(match_result.group(1))
-            minutes = match_result.group(2)
+
+            time_zone_offset = read_offset(message.chat.id)
+            if not time_zone_offset:
+                time_zone_offset = DEFAULT_TIME_ZONE_OFFSET
+
+            hours = add_leading_zero(hour_to_utc(match_result.group(1), time_zone_offset))
+            minutes = add_leading_zero(match_result.group(2))
             chat_id = str(message.chat.id)
-            notification_time = hour + minutes
+            notification_time = hours + minutes
             notification_id = chat_id + notification_time
+
             table = dynamo_db.Table("notification")
             table.delete_item(Key={'id': notification_id})
+
             bot.send_message(message.chat.id, OK_MESSAGE)
         else:
             bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
-    except Exception as e:
-        print(e)
+    except Exception:
+        print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
@@ -122,8 +184,8 @@ def handle_remove_all(message):
             table.delete_item(Key={'id': item['id']})
 
         bot.send_message(message.chat.id, OK_MESSAGE)
-    except Exception as e:
-        print(e)
+    except Exception:
+        print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
@@ -131,47 +193,57 @@ def handle_remove_all(message):
 @bot.message_handler(commands=['list'])
 def handle_list(message):
     try:
+
+        time_zone_offset = read_offset(message.chat.id)
+        if not time_zone_offset:
+            time_zone_offset = DEFAULT_TIME_ZONE_OFFSET
+
         table = dynamo_db.Table("notification")
         response = table.query(IndexName='chat_id-index', KeyConditionExpression=Key('chat_id').eq(str(message.chat.id)))
 
         sb = []
         for item in response['Items']:
-            sb.append(hour_to_moscow(item['notification_time'][:2]))
+            sb.append(str(hour_to_timezone(item['notification_time'][:2], time_zone_offset)))
             sb.append(':')
             sb.append(item['notification_time'][2:])
             sb.append(' - ')
             sb.append(item['message'])
+            sb.append(' - ')
+            sb.append(item['pre_message'])
             sb.append('\n')
 
         if sb:
             bot.send_message(message.chat.id, ''.join(sb))
         else:
-            bot.send_message(message.chat.id, 'Оповещения отсутствуют')
-    except Exception as e:
-        print(e)
+            bot.send_message(message.chat.id, NO_NOTIFICATIONS_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
-def check_input_hour(hour):
-    return BOT_START_WORK_HOUR <= int(hour) <= BOT_END_WORK_HOUR
+def hour_to_utc(hour, time_zone_offset):
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
-def hour_to_utc(hour):
-    return str(int(hour) - MOSCOW_TIME_ZONE_OFFSET)
+def hour_to_timezone(hour, time_zone_offset):
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
-def hour_to_moscow(hour):
-    return str(int(hour) + MOSCOW_TIME_ZONE_OFFSET)
+def add_leading_zero(hour, width=2):
+    return str(hour).zfill(width)
 
 
-def normalize_hour(hour):
-    hour = hour_to_utc(hour)
-
-    if len(hour) == 1:
-        hour = '0' + hour
-
-    return hour
+def read_offset(chat_id):
+    table = dynamo_db.Table("timezone")
+    response = table.get_item(Key={'chat_id': str(chat_id)})
+    print(response)
+    if 'Item' in response:
+        return response['Item']['time_zone_offset']
+    else:
+        return None
 
 
 if __name__ == "__main__":
-    print(check_input_hour(1))
+    print('')
