@@ -7,7 +7,7 @@ import boto3
 import telebot
 from boto3.dynamodb.conditions import Key
 
-TOKEN = '394602017:AAEIbIe_nNcgptpQMkTlfHQndtaN3AdZp4c'
+TOKEN = ''
 
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
 
