@@ -12,7 +12,7 @@ TOKEN = ''
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
 
 DEFAULT_MESSAGE = 'Daily standup meeting.'
-DEFAULT_PRE_MESSAGE = 'Daily standup meeting will begin in {} minutes.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+DEFAULT_PRE_MESSAGE = 'Daily standup meeting will begin in {} minute.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
 
 MOSCOW_TIME_ZONE_OFFSET_HOURS = '+03'
 DEFAULT_TIME_ZONE_OFFSET = MOSCOW_TIME_ZONE_OFFSET_HOURS
@@ -22,6 +22,7 @@ NO_TIME_ZONE_OFFSET_MESSAGE = 'Часовой пояс не установлен
 OK_MESSAGE = 'Ok'
 ERROR_MESSAGE = 'Ошибка'
 WRONG_INPUT_DATA_MESSAGE = 'Неверный формат команды.'
+NO_TASKS = 'Задачи отсутствуют.'
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -99,7 +100,10 @@ def handle_start_help(message):
                    '/remove <ЧЧ:MM> - удалить оповещение в указанное время, для текущего чата.' \
                    '\n' \
                    '\n' \
-                   '/removeall - удалить все оповещения для текущего чата.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+                   '/removeall - удалить все оповещения для текущего чата.' \
+                   '\n' \
+                   '\n' \
+                   '/tasks - вывести список загруженных для текущего чата задач.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
 
     bot.send_message(message.chat.id, text_message)
 
@@ -221,14 +225,46 @@ def handle_list(message):
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
+# Обработчик команд '/tasks'.
+@bot.message_handler(commands=['tasks'])
+def handle_tasks(message):
+    try:
+        table = dynamo_db.Table("tasks")
+        response = table.get_item(Key={'chat_id': str(message.chat.id)})
+
+        if 'Item' in response:
+            tasks = response['Item']['tasks']
+            sb = []
+            for task in tasks:
+                sb.append(task['key'])
+                sb.append(' ')
+                sb.append(task['summary'])
+                sb.append('\n')
+                sb.append(' - назначена на: ')
+                if 'assignee_display_name' in task:
+                    sb.append(task['assignee_display_name'])
+                else:
+                    sb.append('-')
+                sb.append('\n')
+                sb.append(' - статус: ')
+                sb.append(task['status_name'])
+                sb.append('\n')
+            bot.send_message(message.chat.id, ''.join(sb))
+        else:
+            bot.send_message(message.chat.id, NO_TASKS)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
 def hour_to_utc(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def hour_to_timezone(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def add_leading_zero(hour, width=2):
