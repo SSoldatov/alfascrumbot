@@ -7,7 +7,7 @@ import boto3
 import telebot
 from boto3.dynamodb.conditions import Key
 
-TOKEN = ''
+TOKEN = '394602017:AAEIbIe_nNcgptpQMkTlfHQndtaN3AdZp4c'
 
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
 
@@ -236,7 +236,9 @@ def handle_tasks(message):
             tasks = response['Item']['tasks']
             sb = []
             for task in tasks:
+                sb.append('*')
                 sb.append(task['key'])
+                sb.append('*')
                 sb.append(' ')
                 sb.append(task['summary'])
                 sb.append('\n')
@@ -249,7 +251,7 @@ def handle_tasks(message):
                 sb.append(' - статус: ')
                 sb.append(task['status_name'])
                 sb.append('\n')
-            bot.send_message(message.chat.id, ''.join(sb))
+            bot.send_message(parse_mode='markdown', chat_id=message.chat.id, text=''.join(sb))
         else:
             bot.send_message(message.chat.id, NO_TASKS)
     except Exception:
