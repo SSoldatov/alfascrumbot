@@ -8,7 +8,7 @@ BOARD_ID = ''
 JIRA_USER_NAME = ''
 JIRA_USER_PASSWORD = ''
 GET_SPRINT_ID_URL = 'http://jira/rest/agile/1.0/board/{board_id}/sprint?state=active'
-SPRINT_TASK_STATUSES = '\'BACKLOG\', \'IN PROGRESS\', \'CODE REVIEW\', \'DONE\''
+SPRINT_TASK_STATUSES = '\'BACKLOG\', \'IN PROGRESS\', \'CODE REVIEW\''
 GET_SPRINT_TASKS_URL = 'http://jira/rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue?jql=status in ({' \
                        'task_statuses}) AND ' \
                        'type=sub-task&fields=summary,assignee,status'
@@ -97,5 +97,5 @@ if __name__ == "__main__":
         print('Active Sprint not found.')
         sys.exit(0)
     tasks = get_tasks(active_sprint_id)
-    tasks.sort(key=lambda item: ['BACKLOG', 'IN PROGRESS', 'CODE REVIEW', 'DONE'].index(item.status_name.upper()))
+    tasks.sort(key=lambda item: ['BACKLOG', 'IN PROGRESS', 'CODE REVIEW'].index(item.status_name.upper()))
     upload_tasks(task_list_to_json(tasks, CHAT_ID))

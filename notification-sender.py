@@ -60,12 +60,10 @@ def show_tasks(chat_id):
             sb.append(task['summary'])
             sb.append('*')
             sb.append('\n')
-            sb.append('  - назначена на: ')
             if 'assignee_display_name' in task:
+                sb.append('  - ')
                 sb.append(task['assignee_display_name'])
-            else:
-                sb.append('-')
-            sb.append('\n')
+                sb.append('\n')
             current_status = task['status_name']
 
         bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
