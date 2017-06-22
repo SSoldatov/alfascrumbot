@@ -1,18 +1,17 @@
 import traceback
 import requests
 import json
-import operator
 import sys
 
-CHAT_ID = '-243322379'
-BOARD_ID = '5046'
+CHAT_ID = ''
+BOARD_ID = ''
 JIRA_USER_NAME = ''
 JIRA_USER_PASSWORD = ''
 GET_SPRINT_ID_URL = 'http://jira/rest/agile/1.0/board/{board_id}/sprint?state=active'
-SPRINT_TASK_STATUSES = 'BACKLOG, DONE'
+SPRINT_TASK_STATUSES = '\'BACKLOG\', \'IN PROGRESS\', \'CODE REVIEW\', \'DONE\''
 GET_SPRINT_TASKS_URL = 'http://jira/rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue?jql=status in ({' \
                        'task_statuses}) AND ' \
-                       'type=sub-task&fields=summary,assignee,issuetype,status,parent,resolution'
+                       'type=sub-task&fields=summary,assignee,status'
 TASKS_UPLOAD_URL = 'https://wb9fbkheca.execute-api.us-east-2.amazonaws.com/v0/upload'
 
 
@@ -50,17 +49,6 @@ def get_tasks(sprint_id):
                 if 'assignee' in fields:
                     if fields['assignee'] is not None:
                         task_item.assignee_display_name = fields['assignee'].get('displayName', None)
-                if 'issuetype' in fields:
-                    if fields['issuetype'] is not None:
-                        task_item.issue_type_description = fields['issuetype'].get('description', None)
-                if 'parent' in fields:
-                    if fields['parent'] is not None:
-                        parent = fields['parent']
-                        task_item.parent_key = parent.get('key', None)
-                        if parent['fields'] is not None:
-                            task_item.parent_summary = parent['fields'].get('summary', None)
-                if 'resolution' in fields:
-                    task_item.resolution = fields['resolution']
                 if 'status' in fields:
                     if fields['status'] is not None:
                         task_item.status_name = fields['status'].get('name', None)
@@ -109,5 +97,5 @@ if __name__ == "__main__":
         print('Active Sprint not found.')
         sys.exit(0)
     tasks = get_tasks(active_sprint_id)
-    tasks.sort(key=operator.attrgetter('status_name'), reverse=False)
+    tasks.sort(key=lambda item: ['BACKLOG', 'IN PROGRESS', 'CODE REVIEW', 'DONE'].index(item.status_name.upper()))
     upload_tasks(task_list_to_json(tasks, CHAT_ID))

@@ -103,7 +103,10 @@ def handle_start_help(message):
                    '/removeall - удалить все оповещения для текущего чата.' \
                    '\n' \
                    '\n' \
-                   '/tasks - вывести список загруженных для текущего чата задач.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+                   '/tasks - вывести список загруженных для текущего чата задач.' \
+                   '\n' \
+                   '\n' \
+                   '/removetasks - удалить все загруженные для текущего чата задачи.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
 
     bot.send_message(message.chat.id, text_message)
 
@@ -229,34 +232,57 @@ def handle_list(message):
 @bot.message_handler(commands=['tasks'])
 def handle_tasks(message):
     try:
-        table = dynamo_db.Table("tasks")
-        response = table.get_item(Key={'chat_id': str(message.chat.id)})
-
-        if 'Item' in response:
-            tasks = response['Item']['tasks']
-            sb = []
-            for task in tasks:
-                sb.append('*')
-                sb.append(task['key'])
-                sb.append('*')
-                sb.append(' ')
-                sb.append(task['summary'])
-                sb.append('\n')
-                sb.append(' - назначена на: ')
-                if 'assignee_display_name' in task:
-                    sb.append(task['assignee_display_name'])
-                else:
-                    sb.append('-')
-                sb.append('\n')
-                sb.append(' - статус: ')
-                sb.append(task['status_name'])
-                sb.append('\n')
-            bot.send_message(parse_mode='markdown', chat_id=message.chat.id, text=''.join(sb))
-        else:
-            bot.send_message(message.chat.id, NO_TASKS)
+        show_tasks(str(message.chat.id))
     except Exception:
         print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/removetasks'.
+@bot.message_handler(commands=['removetasks'])
+def handle_tasks(message):
+    try:
+        table = dynamo_db.Table("tasks")
+        chat_id = str(message.chat.id)
+        table.delete_item(Key={'chat_id': chat_id})
+        bot.send_message(chat_id, OK_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+def show_tasks(chat_id):
+    table = dynamo_db.Table("tasks")
+    response = table.get_item(Key={'chat_id': chat_id})
+
+    if 'Item' in response:
+        tasks = response['Item']['tasks']
+        sb = []
+        current_status = None
+        for task in tasks:
+            if task['status_name'] != current_status:
+                sb.append('\n')
+                sb.append('Статус: ')
+                sb.append(task['status_name'])
+                sb.append('\n')
+            sb.append(' ')
+            sb.append(task['key'])
+            sb.append(' ')
+            sb.append('*')
+            sb.append(task['summary'])
+            sb.append('*')
+            sb.append('\n')
+            sb.append('  - назначена на: ')
+            if 'assignee_display_name' in task:
+                sb.append(task['assignee_display_name'])
+            else:
+                sb.append('-')
+            sb.append('\n')
+            current_status = task['status_name']
+
+        bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
+    else:
+        bot.send_message(chat_id, NO_TASKS)
 
 
 def hour_to_utc(hour, time_zone_offset):
