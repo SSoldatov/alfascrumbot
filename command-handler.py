@@ -134,7 +134,6 @@ def handle_start_help(message):
 @bot.message_handler(commands=['add'])
 def handle_add(message):
     try:
-        print(message.text)
         pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])( ([^ ]*))?( ([^ ]*))?$"
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
