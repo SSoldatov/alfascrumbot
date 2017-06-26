@@ -8,6 +8,12 @@ TOKEN = ''
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
 NO_TASKS = 'Задачи отсутствуют.'
 
+EMOJI_BACKLOG = u'\u23F8'
+EMOJI_IN_PROGRESS = u'\u25B6'
+EMOJI_CODE_REVIEW = u'\u23EF'
+EMOJI_DONE = u'\u2714'
+
+DEFAULT_INDENT = '    '
 
 bot = telebot.TeleBot(TOKEN)
 dynamo_db = boto3.resource('dynamodb')
@@ -39,6 +45,19 @@ def add_leading_zero(hour, width=2):
     return str(hour).zfill(width)
 
 
+def get_emoji_alias_name(status_name):
+    if status_name == 'BACKLOG':
+        return EMOJI_BACKLOG
+    elif status_name == 'In Progress':
+        return EMOJI_IN_PROGRESS
+    elif status_name == 'Code review':
+        return EMOJI_CODE_REVIEW
+    elif status_name == 'Done':
+        return EMOJI_DONE
+    else:
+        return ''
+
+
 def show_tasks(chat_id):
     table = dynamo_db.Table("tasks")
     response = table.get_item(Key={'chat_id': chat_id})
@@ -46,25 +65,35 @@ def show_tasks(chat_id):
     if 'Item' in response:
         tasks = response['Item']['tasks']
         sb = []
-        current_status = None
         for task in tasks:
-            if task['status_name'] != current_status:
-                sb.append('\n')
-                sb.append('Статус: ')
-                sb.append(task['status_name'])
-                sb.append('\n')
-            sb.append(' ')
+            sb.append('*')
             sb.append(task['key'])
             sb.append(' ')
-            sb.append('*')
             sb.append(task['summary'])
             sb.append('*')
             sb.append('\n')
+            sb.append(get_emoji_alias_name(task['status_name']))
             if 'assignee_display_name' in task:
-                sb.append('  - ')
+                sb.append(' - ')
                 sb.append(task['assignee_display_name'])
+            sb.append('\n')
+            sb.append('\n')
+            for sub_task in task['sub_tasks']:
+                sb.append(DEFAULT_INDENT)
+                sb.append(sub_task['key'])
+                sb.append(' ')
+                sb.append('*')
+                sb.append(sub_task['summary'])
+                sb.append('*')
                 sb.append('\n')
-            current_status = task['status_name']
+                sb.append(DEFAULT_INDENT)
+                sb.append(get_emoji_alias_name(sub_task['status_name']))
+                if 'assignee_display_name' in sub_task:
+                    sb.append(' - ')
+                    sb.append(sub_task['assignee_display_name'])
+                sb.append('\n')
+                sb.append('\n')
+            sb.append('\n')
 
         bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
     else:

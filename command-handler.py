@@ -9,10 +9,10 @@ from boto3.dynamodb.conditions import Key
 
 TOKEN = ''
 
-PRE_NOTIFICATION_OFFSET_MINUTES = 1
+PRE_NOTIFICATION_OFFSET_IN_MINUTES = 1
 
 DEFAULT_MESSAGE = 'Daily standup meeting.'
-DEFAULT_PRE_MESSAGE = 'Daily standup meeting will begin in {} minute.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+DEFAULT_PRE_MESSAGE = 'Daily standup meeting will begin in {} minute.'.format(PRE_NOTIFICATION_OFFSET_IN_MINUTES)
 
 MOSCOW_TIME_ZONE_OFFSET_HOURS = '+03'
 DEFAULT_TIME_ZONE_OFFSET = MOSCOW_TIME_ZONE_OFFSET_HOURS
@@ -23,6 +23,13 @@ OK_MESSAGE = 'Ok'
 ERROR_MESSAGE = 'Ошибка'
 WRONG_INPUT_DATA_MESSAGE = 'Неверный формат команды.'
 NO_TASKS = 'Задачи отсутствуют.'
+
+EMOJI_BACKLOG = u'\u23F8'
+EMOJI_IN_PROGRESS = u'\u25B6'
+EMOJI_CODE_REVIEW = u'\u23EF'
+EMOJI_DONE = u'\u2714'
+
+DEFAULT_INDENT = '    '
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -81,17 +88,18 @@ def handle_start_help(message):
                    '/add <ЧЧ:MM> <ТЕКСТ ОПОВЕЩЕНИЯ> <ТЕКСТ ПРЕДВАРИТЕЛЬНОГО ОПОВЕЩЕНИЯ> - добавить новое оповещение в указанное время,' \
                    ' для текущего чата.' \
                    '\n' \
-                   ' -при указании времени используется часовой пояс заданный командой /settmz.' \
+                   '{indent}-при указании времени используется часовой пояс заданный командой /settmz.' \
                    '\n' \
-                   ' -если часовой пояс не указан, используется время московское.' \
+                   '{indent}-если часовой пояс не указан, используется время московское.' \
                    '\n' \
-                   ' -если текст оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
+                   '{indent}-если текст оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
                    '\n' \
-                   ' -если текст предварительного оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
+                   '{indent}-если текст предварительного оповещения отсутствует, будет использоваться сообщение по умолчанию.' \
                    '\n' \
-                   ' -предварительное оповещение будет отправлено за {} минуту до указанного времени.' \
+                   '{indent}-предварительное оповещение будет отправлено за {pre_notification_offset_in_minutes}' \
+                   ' минуту до указанного времени.' \
                    '\n' \
-                   ' -если существует ранее добавленное оповещение в указанное время, оно будет обновлено.' \
+                   '{indent}-если существует ранее добавленное оповещение в указанное время, оно будет обновлено.' \
                    '\n' \
                    '\n' \
                    '/list - вывести список оповещений для текущего чата.' \
@@ -105,8 +113,19 @@ def handle_start_help(message):
                    '\n' \
                    '/tasks - вывести список загруженных для текущего чата задач.' \
                    '\n' \
+                   '    -под номером задачи выводится emoji символ, обозначающий ее статус:' \
                    '\n' \
-                   '/removetasks - удалить все загруженные для текущего чата задачи.'.format(PRE_NOTIFICATION_OFFSET_MINUTES)
+                   '{indent}{indent}{backlog_emoji} - BACKLOG' \
+                   '\n' \
+                   '{indent}{indent}{in_progress_emoji} - In Progress' \
+                   '\n' \
+                   '{indent}{indent}{code_review_emoji} - Code review' \
+                   '\n' \
+                   '\n' \
+                   '/removetasks - удалить все загруженные для текущего чата задачи.' \
+        .format(pre_notification_offset_in_minutes=PRE_NOTIFICATION_OFFSET_IN_MINUTES,
+                indent=DEFAULT_INDENT, backlog_emoji=EMOJI_BACKLOG, in_progress_emoji = EMOJI_IN_PROGRESS,
+                code_review_emoji=EMOJI_CODE_REVIEW)
 
     bot.send_message(message.chat.id, text_message)
 
@@ -115,6 +134,7 @@ def handle_start_help(message):
 @bot.message_handler(commands=['add'])
 def handle_add(message):
     try:
+        print(message.text)
         pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])( ([^ ]*))?( ([^ ]*))?$"
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
@@ -251,6 +271,19 @@ def handle_tasks(message):
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
+def get_emoji_alias_name(status_name):
+    if status_name == 'BACKLOG':
+        return EMOJI_BACKLOG
+    elif status_name == 'In Progress':
+        return EMOJI_IN_PROGRESS
+    elif status_name == 'Code review':
+        return EMOJI_CODE_REVIEW
+    elif status_name == 'Done':
+        return EMOJI_DONE
+    else:
+        return ''
+
+
 def show_tasks(chat_id):
     table = dynamo_db.Table("tasks")
     response = table.get_item(Key={'chat_id': chat_id})
@@ -258,25 +291,35 @@ def show_tasks(chat_id):
     if 'Item' in response:
         tasks = response['Item']['tasks']
         sb = []
-        current_status = None
         for task in tasks:
-            if task['status_name'] != current_status:
-                sb.append('\n')
-                sb.append('Статус: ')
-                sb.append(task['status_name'])
-                sb.append('\n')
-            sb.append(' ')
+            sb.append('*')
             sb.append(task['key'])
             sb.append(' ')
-            sb.append('*')
             sb.append(task['summary'])
             sb.append('*')
             sb.append('\n')
+            sb.append(get_emoji_alias_name(task['status_name']))
             if 'assignee_display_name' in task:
-                sb.append('  - ')
+                sb.append(' - ')
                 sb.append(task['assignee_display_name'])
+            sb.append('\n')
+            sb.append('\n')
+            for sub_task in task['sub_tasks']:
+                sb.append(DEFAULT_INDENT)
+                sb.append(sub_task['key'])
+                sb.append(' ')
+                sb.append('*')
+                sb.append(sub_task['summary'])
+                sb.append('*')
                 sb.append('\n')
-            current_status = task['status_name']
+                sb.append(DEFAULT_INDENT)
+                sb.append(get_emoji_alias_name(sub_task['status_name']))
+                if 'assignee_display_name' in sub_task:
+                    sb.append(' - ')
+                    sb.append(sub_task['assignee_display_name'])
+                sb.append('\n')
+                sb.append('\n')
+            sb.append('\n')
 
         bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
     else:
@@ -284,13 +327,13 @@ def show_tasks(chat_id):
 
 
 def hour_to_utc(hour, time_zone_offset):
-    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(
-        hours=int(time_zone_offset))).hour
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
 def hour_to_timezone(hour, time_zone_offset):
-    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(
-        hours=int(time_zone_offset))).hour
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
 def add_leading_zero(hour, width=2):
