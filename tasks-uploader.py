@@ -111,7 +111,8 @@ def sort_list_of_items(list_of_items):
 def to_sort_tasks(tasks):
     sort_list_of_items(tasks)
     for task in tasks:
-        sort_list_of_items(task['sub_tasks'])
+        if 'sub_tasks' in task:
+            sort_list_of_items(task['sub_tasks'])
     return tasks
 
 

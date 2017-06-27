@@ -1,8 +1,9 @@
 import datetime
 
 import boto3
-import telebot
 from boto3.dynamodb.conditions import Key
+
+import telebot
 
 TOKEN = ''
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
@@ -64,37 +65,41 @@ def show_tasks(chat_id):
 
     if 'Item' in response:
         tasks = response['Item']['tasks']
-        sb = []
-        for task in tasks:
-            sb.append('*')
-            sb.append(task['key'])
-            sb.append(' ')
-            sb.append(task['summary'])
-            sb.append('*')
-            sb.append('\n')
-            sb.append(get_emoji_alias_name(task['status_name']))
-            if 'assignee_display_name' in task:
-                sb.append(' - ')
-                sb.append(task['assignee_display_name'])
-            sb.append('\n')
-            sb.append('\n')
-            for sub_task in task['sub_tasks']:
-                sb.append(DEFAULT_INDENT)
-                sb.append(sub_task['key'])
+        if tasks:
+            sb = []
+            for task in tasks:
+                sb.append('*')
+                sb.append(task['key'])
                 sb.append(' ')
-                sb.append('*')
-                sb.append(sub_task['summary'])
+                sb.append(task['summary'])
                 sb.append('*')
                 sb.append('\n')
-                sb.append(DEFAULT_INDENT)
-                sb.append(get_emoji_alias_name(sub_task['status_name']))
-                if 'assignee_display_name' in sub_task:
+                sb.append(get_emoji_alias_name(task['status_name']))
+                if 'assignee_display_name' in task:
                     sb.append(' - ')
-                    sb.append(sub_task['assignee_display_name'])
+                    sb.append(task['assignee_display_name'])
                 sb.append('\n')
                 sb.append('\n')
-            sb.append('\n')
+                if 'sub_tasks' in task:
+                    for sub_task in task['sub_tasks']:
+                        sb.append(DEFAULT_INDENT)
+                        sb.append(sub_task['key'])
+                        sb.append(' ')
+                        sb.append('*')
+                        sb.append(sub_task['summary'])
+                        sb.append('*')
+                        sb.append('\n')
+                        sb.append(DEFAULT_INDENT)
+                        sb.append(get_emoji_alias_name(sub_task['status_name']))
+                        if 'assignee_display_name' in sub_task:
+                            sb.append(' - ')
+                            sb.append(sub_task['assignee_display_name'])
+                        sb.append('\n')
+                        sb.append('\n')
+                    sb.append('\n')
 
-        bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
+            bot.send_message(parse_mode='markdown', chat_id=chat_id, text=''.join(sb))
+        else:
+            bot.send_message(chat_id, NO_TASKS)
     else:
         bot.send_message(chat_id, NO_TASKS)
