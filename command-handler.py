@@ -156,7 +156,7 @@ def handle_start_help(message):
                    '/removetasks - удалить все загруженные для текущего чата задачи.' \
                    '\n' \
                    '\n' \
-                   '/tonextstatus_<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (Порядок следования статусов изложен в описании команды /tasks).' \
+                   '/tonextstatus_<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (порядок следования статусов изложен в описании команды /tasks).' \
                    '\n' \
                    '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.'.format(
         pre_notification_offset_in_minutes=PRE_NOTIFICATION_OFFSET_IN_MINUTES, indent=DEFAULT_INDENT, backlog_emoji=EMOJI_BACKLOG,
