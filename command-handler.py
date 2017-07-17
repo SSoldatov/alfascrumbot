@@ -7,6 +7,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 import telebot
+from telebot import types
 
 TOKEN = ''
 
@@ -36,6 +37,8 @@ DEFAULT_INDENT = '    '
 
 TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'DONE']
 
+STATUS_CHANGE_CONFIRM_TIME_IN_SECOND = 10
+
 bot = telebot.TeleBot(TOKEN)
 
 dynamo_db = boto3.resource('dynamodb')
@@ -44,7 +47,10 @@ dynamo_db = boto3.resource('dynamodb')
 # Обработчик входящих сообщений
 def handle(event, context):
     update = telebot.types.Update.de_json(str(event).replace("'", "\"").replace("True", "true"))
-    bot.process_new_messages([update.message])
+    if update.message:
+        bot.process_new_messages([update.message])
+    if update.callback_query:
+        bot.process_new_callback_query([update.callback_query])
     time.sleep(1.5)
 
 
@@ -152,15 +158,17 @@ def handle_start_help(message):
                    '\n' \
                    '{indent}{indent}{code_review_emoji} - Code review' \
                    '\n' \
+                   '{indent}{indent}{done_emoji} - Done' \
+                   '\n' \
                    '\n' \
                    '/removetasks - удалить все загруженные для текущего чата задачи.' \
                    '\n' \
                    '\n' \
-                   '/tonextstatus_<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (порядок следования статусов изложен в описании команды /tasks).' \
+                   '/<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (порядок следования статусов изложен в описании команды /tasks).' \
                    '\n' \
                    '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.'.format(
         pre_notification_offset_in_minutes=PRE_NOTIFICATION_OFFSET_IN_MINUTES, indent=DEFAULT_INDENT, backlog_emoji=EMOJI_BACKLOG,
-        todo_emoji=EMOJI_TODO, in_progress_emoji=EMOJI_IN_PROGRESS, code_review_emoji=EMOJI_CODE_REVIEW)
+        todo_emoji=EMOJI_TODO, in_progress_emoji=EMOJI_IN_PROGRESS, code_review_emoji=EMOJI_CODE_REVIEW, done_emoji=EMOJI_DONE)
 
     bot.send_message(message.chat.id, text_message)
 
@@ -308,10 +316,10 @@ def handle_tasks(message):
 
 
 # Обработчик команд '/tonextstatus'.
-@bot.message_handler(regexp="^/tonextstatus.*$")
+@bot.message_handler(regexp="^/[A-Z, a-z]*_[0-9]*$")
 def handle_tonextstatus(message):
     try:
-        pattern_string = "^/tonextstatus_(.*)$"
+        pattern_string = "^/([A-Z, a-z]*_[0-9]*)$"
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -324,24 +332,57 @@ def handle_tonextstatus(message):
                     task = get_task(task_id, tasks)
                     if task:
                         next_status = get_next_status(task['status_name'])
-                        if next_status:
-                            task['status_name'] = next_status
-                            if not 'transitions' in data:
-                                data['transitions'] = dict()
-                            transitions = data['transitions']
-                            transitions_count = 0
-                            if task_id in transitions:
-                                transitions_count = transitions[task_id]
-                            transitions_count = transitions_count + 1
-                            transitions[task_id] = transitions_count
-                            save_chat_data(chat_id, data)
-            show_tasks(chat_id)
-
+                        yes_no_keyboard = create_yes_no_keyboard(task_id, next_status)
+                        bot.send_message(chat_id, "Сменить статус задачи {task_key} на {next_status}?".format(task_key=task_id,
+                                                                                                              next_status=next_status),
+                                         reply_markup=yes_no_keyboard)
         else:
             bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
     except Exception:
         print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+def create_yes_no_keyboard(task_id, status_name):
+    keyboard = types.InlineKeyboardMarkup()
+    yes_button = types.InlineKeyboardButton(text="Да", callback_data=create_callback_data('yes', task_id, status_name))
+    no_button = types.InlineKeyboardButton(text="Нет", callback_data=create_callback_data('no'))
+    keyboard.add(yes_button)
+    keyboard.add(no_button)
+    return keyboard
+
+
+def create_callback_data(action, task_id=None, status_name=None):
+    return "{action}:{task_id}:{status_name}:{time}".format(action=action, task_id=task_id, status_name=status_name,
+                                                            time=get_current_time_in_second())
+
+
+def get_current_time_in_second():
+    return int(round(time.time()))
+
+
+def change_task_status(task_id, chat_id, next_status):
+    data = get_chat_data(chat_id)
+    if 'tasks' in data:
+        tasks = data['tasks']
+        if tasks:
+            task = get_task(task_id, tasks)
+            if task:
+                current_status = task['status_name']
+                if current_status == next_status:
+                    return False
+                task['status_name'] = next_status
+                if not 'transitions' in data:
+                    data['transitions'] = dict()
+                transitions = data['transitions']
+                transitions_count = 0
+                if task_id in transitions:
+                    transitions_count = transitions[task_id]
+                transitions_count = transitions_count + 1
+                transitions[task_id] = transitions_count
+                save_chat_data(chat_id, data)
+                return True
+    return False
 
 
 # Обработчик команд '/removetransitions'.
@@ -358,6 +399,29 @@ def handle_removetransitions(message):
         print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_inline(call):
+    try:
+        if call.message:
+            chat_id = call.message.chat.id
+            data = call.data.split(':')
+            action = data[0]
+            task_id = data[1]
+            status_name = data[2]
+            confirm_time = int(data[3])
+            if get_current_time_in_second() - confirm_time <= STATUS_CHANGE_CONFIRM_TIME_IN_SECOND:
+                if action == "yes":
+                    if change_task_status(task_id, chat_id, status_name):
+                        bot.send_message(chat_id, "Статус задачи {task_id} изменен на {status_name}".format(task_id=task_id,
+                                                                                                            status_name=status_name))
+                    else:
+                        bot.send_message(chat_id, "Статус задачи не изменен")
+                else:
+                    bot.send_message(chat_id, "Статус задачи не изменен")
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
 def get_task(task_id, tasks):
@@ -395,38 +459,35 @@ def show_tasks(chat_id):
             sb = []
             for task in tasks:
                 sb.append('*')
-                sb.append(task['key'])
+                sb.append(get_emoji_alias_name(task['status_name']))
                 sb.append(' ')
                 sb.append(task['summary'])
                 sb.append('*')
                 sb.append('\n')
-                sb.append(get_emoji_alias_name(task['status_name']))
+                if not is_last_status(task['status_name']):
+                    sb.append('/')
+                sb.append(task['key'].replace("-", "\_"))
                 if 'assignee_display_name' in task:
                     sb.append(' - ')
                     sb.append(task['assignee_display_name'])
-                sb.append('\n')
-                sb.append('/tonextstatus\_')
-                sb.append(task['key'].replace("-", "\_"))
                 sb.append('\n')
                 sb.append('\n')
                 if 'sub_tasks' in task:
                     for sub_task in task['sub_tasks']:
                         sb.append(DEFAULT_INDENT)
-                        sb.append(sub_task['key'])
+                        sb.append(get_emoji_alias_name(sub_task['status_name']))
                         sb.append(' ')
                         sb.append('*')
                         sb.append(sub_task['summary'])
                         sb.append('*')
                         sb.append('\n')
                         sb.append(DEFAULT_INDENT)
-                        sb.append(get_emoji_alias_name(sub_task['status_name']))
+                        if not is_last_status(sub_task['status_name']):
+                            sb.append('/')
+                        sb.append(sub_task['key'].replace("-", "\_"))
                         if 'assignee_display_name' in sub_task:
                             sb.append(' - ')
                             sb.append(sub_task['assignee_display_name'])
-                        sb.append('\n')
-                        sb.append(DEFAULT_INDENT)
-                        sb.append('/tonextstatus\_')
-                        sb.append(sub_task['key'].replace("-", "\_"))
                         sb.append('\n')
                         sb.append('\n')
                     sb.append('\n')
@@ -439,13 +500,13 @@ def show_tasks(chat_id):
 
 
 def hour_to_utc(hour, time_zone_offset):
-    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(
-        hours=int(time_zone_offset))).hour
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
 def hour_to_timezone(hour, time_zone_offset):
-    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(
-        hours=int(time_zone_offset))).hour
+    return (
+    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
 
 
 def add_leading_zero(hour, width=2):
@@ -471,6 +532,12 @@ def get_next_status(current_status):
     return TASK_SORTING_ORDER[next_index]
 
 
+def is_last_status(current_status):
+    current_status = current_status.upper()
+    current_index = TASK_SORTING_ORDER.index(current_status)
+    return len(TASK_SORTING_ORDER) == current_index + 1
+
+
 def get_data(response):
     if 'Item' in response:
         data = response['Item']['data']
@@ -481,12 +548,12 @@ def get_data(response):
 
 def get_chat_data(chat_id):
     table = dynamo_db.Table("chat_data")
-    return get_data(table.get_item(Key={'chat_id': chat_id}))
+    return get_data(table.get_item(Key={'chat_id': str(chat_id)}))
 
 
 def save_chat_data(chat_id, data):
     table = dynamo_db.Table("chat_data")
-    table.put_item(Item={'chat_id': chat_id, 'data': data})
+    table.put_item(Item={'chat_id': str(chat_id), 'data': data})
 
 
 def get_chat_id(message):

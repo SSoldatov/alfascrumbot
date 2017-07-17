@@ -1,8 +1,9 @@
 import datetime
 
 import boto3
-import telebot
 from boto3.dynamodb.conditions import Key
+
+import telebot
 
 TOKEN = ''
 PRE_NOTIFICATION_OFFSET_MINUTES = 1
@@ -15,6 +16,8 @@ EMOJI_CODE_REVIEW = u'\u23EF\uFE0F'
 EMOJI_DONE = u'\u2714\uFE0F'
 
 DEFAULT_INDENT = '    '
+
+TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'DONE']
 
 bot = telebot.TeleBot(TOKEN)
 dynamo_db = boto3.resource('dynamodb')
@@ -70,38 +73,35 @@ def show_tasks(chat_id):
             sb = []
             for task in tasks:
                 sb.append('*')
-                sb.append(task['key'])
+                sb.append(get_emoji_alias_name(task['status_name']))
                 sb.append(' ')
                 sb.append(task['summary'])
                 sb.append('*')
                 sb.append('\n')
-                sb.append(get_emoji_alias_name(task['status_name']))
+                if not is_last_status(task['status_name']):
+                    sb.append('/')
+                sb.append(task['key'].replace("-", "\_"))
                 if 'assignee_display_name' in task:
                     sb.append(' - ')
                     sb.append(task['assignee_display_name'])
-                sb.append('\n')
-                sb.append('/tonextstatus\_')
-                sb.append(task['key'].replace("-", "\_"))
                 sb.append('\n')
                 sb.append('\n')
                 if 'sub_tasks' in task:
                     for sub_task in task['sub_tasks']:
                         sb.append(DEFAULT_INDENT)
-                        sb.append(sub_task['key'])
+                        sb.append(get_emoji_alias_name(sub_task['status_name']))
                         sb.append(' ')
                         sb.append('*')
                         sb.append(sub_task['summary'])
                         sb.append('*')
                         sb.append('\n')
                         sb.append(DEFAULT_INDENT)
-                        sb.append(get_emoji_alias_name(sub_task['status_name']))
+                        if not is_last_status(sub_task['status_name']):
+                            sb.append('/')
+                        sb.append(sub_task['key'].replace("-", "\_"))
                         if 'assignee_display_name' in sub_task:
                             sb.append(' - ')
                             sb.append(sub_task['assignee_display_name'])
-                        sb.append('\n')
-                        sb.append(DEFAULT_INDENT)
-                        sb.append('/tonextstatus\_')
-                        sb.append(sub_task['key'].replace("-", "\_"))
                         sb.append('\n')
                         sb.append('\n')
                     sb.append('\n')
@@ -119,6 +119,12 @@ def get_data(response):
     else:
         data = dict()
     return data
+
+
+def is_last_status(current_status):
+    current_status = current_status.upper()
+    current_index = TASK_SORTING_ORDER.index(current_status)
+    return len(TASK_SORTING_ORDER) == current_index + 1
 
 
 def get_chat_data(chat_id):
