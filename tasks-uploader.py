@@ -152,11 +152,12 @@ def put_task_to_next_transition(task_id, repeat_count=1):
     for _ in repeat(None, int(repeat_count)):
         logging.info('Putting task %s to next transition...', task_id)
         transition_id = get_next_transitions_id(task_id)
-        url = TASK_TRANSITIONS_URL.format(jira_host=JIRA_HOST, task_id=task_id)
-        headers = {'Content-type': 'application/json'}
-        data = {'transition': {'id': transition_id}}
-        response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data), headers=headers)
-        check_response_status(response)
+        if transition_id:
+            url = TASK_TRANSITIONS_URL.format(jira_host=JIRA_HOST, task_id=task_id)
+            headers = {'Content-type': 'application/json'}
+            data = {'transition': {'id': transition_id}}
+            response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data), headers=headers)
+            check_response_status(response)
         logging.info('Done.')
 
 
@@ -169,14 +170,18 @@ def get_next_transitions_id(task_id):
 
         json_response = parse_json(response.text)
         if not json_response:
-            raise TaskUploaderException('Next transition not found.')
+            logging.info("Next transition not found")
+            return None
         if 'transitions' not in json_response:
-            raise TaskUploaderException('Next transition not found.')
+            logging.info("Next transition not found")
+            return None
         transitions = json_response['transitions']
         if not transitions:
-            raise TaskUploaderException('Next transition not found.')
+            logging.info("Next transition not found")
+            return None
         if 'id' not in transitions[0]:
-            raise TaskUploaderException('Next transition not found.')
+            logging.info("Next transition not found")
+            return None
         transition_id = transitions[0]['id']
 
         logging.info('Done.')
