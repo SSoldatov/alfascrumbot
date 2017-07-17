@@ -336,6 +336,10 @@ def handle_tonextstatus(message):
                         bot.send_message(chat_id, "Сменить статус задачи {task_key} на {next_status}?".format(task_key=task_id,
                                                                                                               next_status=next_status),
                                          reply_markup=yes_no_keyboard)
+                    else:
+                        bot.send_message(message.chat.id, NO_TASK.format(task_id=task_id))
+            else:
+                bot.send_message(message.chat.id, NO_TASKS)
         else:
             bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
     except Exception:
@@ -405,23 +409,26 @@ def callback_inline(call):
     try:
         if call.message:
             chat_id = call.message.chat.id
-            data = call.data.split(':')
-            action = data[0]
-            task_id = data[1]
-            status_name = data[2]
-            confirm_time = int(data[3])
-            if get_current_time_in_second() - confirm_time <= STATUS_CHANGE_CONFIRM_TIME_IN_SECOND:
-                if action == "yes":
-                    if change_task_status(task_id, chat_id, status_name):
-                        bot.send_message(chat_id, "Статус задачи {task_id} изменен на {status_name}".format(task_id=task_id,
-                                                                                                            status_name=status_name))
+            try:
+                data = call.data.split(':')
+                action = data[0]
+                task_id = data[1]
+                status_name = data[2]
+                confirm_time = int(data[3])
+                if get_current_time_in_second() - confirm_time <= STATUS_CHANGE_CONFIRM_TIME_IN_SECOND:
+                    if action == "yes":
+                        if change_task_status(task_id, chat_id, status_name):
+                            bot.send_message(chat_id, "Статус задачи {task_id} изменен на {status_name}".format(task_id=task_id,
+                                                                                                                status_name=status_name))
+                        else:
+                            bot.send_message(chat_id, "Статус задачи не изменен")
                     else:
                         bot.send_message(chat_id, "Статус задачи не изменен")
-                else:
-                    bot.send_message(chat_id, "Статус задачи не изменен")
+            except Exception:
+                print(traceback.format_exc())
+                bot.send_message(chat_id, ERROR_MESSAGE)
     except Exception:
         print(traceback.format_exc())
-        bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
 def get_task(task_id, tasks):
@@ -500,13 +507,13 @@ def show_tasks(chat_id):
 
 
 def hour_to_utc(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def hour_to_timezone(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def add_leading_zero(hour, width=2):
