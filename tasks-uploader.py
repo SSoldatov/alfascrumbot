@@ -250,40 +250,40 @@ def read_push_analytics():
 
     result = {}
 
-    if len(row) > 0:
+    if len(row) > 0 and row[0]:
         result['date'] = row[0]
 
-    if len(row) > 1:
+    if len(row) > 1 and row[1]:
         result['delivered_android'] = row[1]
 
-    if len(row) > 2:
+    if len(row) > 2 and row[2]:
         result['delivered_ios'] = row[2]
 
-    if len(row) > 3:
+    if len(row) > 3 and row[3]:
         result['sent_android'] = row[3]
 
-    if len(row) > 4:
+    if len(row) > 4 and row[4]:
         result['sent_ios'] = row[4]
 
-    if len(row) > 5:
+    if len(row) > 5 and row[5]:
         result['with_error_android'] = row[5]
 
-    if len(row) > 6:
+    if len(row) > 6 and row[6]:
         result['with_error_ios'] = row[6]
 
-    if len(row) > 7:
+    if len(row) > 7 and row[7]:
         result['duplicated_with_sms_android'] = row[7]
 
-    if len(row) > 8:
+    if len(row) > 8 and row[8]:
         result['duplicated_with_sms_ios'] = row[8]
 
-    if len(row) > 9:
+    if len(row) > 9 and row[9]:
         result['сonnected_clients'] = row[9]
 
-    if len(row) > 10:
+    if len(row) > 10 and row[10]:
         result['disconnected_clients'] = row[10]
 
-    if len(row) > 11:
+    if len(row) > 11 and row[11]:
         result['updated_push_tokens'] = row[11]
 
     return result
