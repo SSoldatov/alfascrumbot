@@ -278,13 +278,16 @@ def read_push_analytics():
         result['duplicated_with_sms_ios'] = row[8]
 
     if len(row) > 9 and row[9]:
-        result['сonnected_clients'] = row[9]
+        result['saved_bank'] = row[9]
 
     if len(row) > 10 and row[10]:
-        result['disconnected_clients'] = row[10]
+        result['сonnected_clients'] = row[10]
 
     if len(row) > 11 and row[11]:
-        result['updated_push_tokens'] = row[11]
+        result['disconnected_clients'] = row[11]
+
+    if len(row) > 12 and row[12]:
+        result['updated_push_tokens'] = row[12]
 
     return result
 

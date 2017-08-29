@@ -572,6 +572,12 @@ def show_push_analytics(chat_id):
                 sb.append(push_analytics_data['duplicated_with_sms_ios'])
                 sb.append('\n')
 
+            if 'saved_bank' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('сэкономили банку: ')
+                sb.append(push_analytics_data['saved_bank'])
+                sb.append('\n')
+
             if 'сonnected_clients' in push_analytics_data:
                 sb.append(DEFAULT_INDENT)
                 sb.append('подключено (клиентов): ')
