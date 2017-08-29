@@ -43,32 +43,42 @@ def get_active_sprint_id():
 
         json_response = parse_json(response.text)
         if not json_response:
-            raise TaskUploaderException('Active sprint not found.')
+            logging.info('Active sprint not found.')
+            return None
 
         if 'values' not in json_response:
-            raise TaskUploaderException('Active sprint not found.')
+            logging.info('Active sprint not found.')
+            return None
 
         values = json_response['values']
         if not values:
-            raise TaskUploaderException('Active sprint not found.')
+            logging.info('Active sprint not found.')
+            return None
 
         if 'id' not in values[0]:
-            raise TaskUploaderException('Active sprint not found.')
+            logging.info('Active sprint not found.')
+            return None
 
         sprint_id = values[0]['id']
         if not sprint_id:
-            raise TaskUploaderException('Active sprint not found.')
+            logging.info('Active sprint not found.')
+            return None
 
         logging.info('Done.')
 
         return sprint_id
     except ReadTimeout:
         logging.error('Error timeout')
-        raise TaskUploaderException('Active sprint not found.')
+        logging.info('Active sprint not found.')
+        return None
 
 
 def get_tasks(sprint_id):
     logging.info('Getting tasks...')
+    task_list = []
+    if sprint_id is None:
+        return task_list
+
     url = GET_SPRINT_TASKS_URL.format(jira_host=JIRA_HOST, board_id=BOARD_ID, sprint_id=sprint_id, task_statuses=SPRINT_TASK_STATUSES)
     response = requests.get(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD))
     json_response = parse_json(response.text)
@@ -76,7 +86,6 @@ def get_tasks(sprint_id):
     if 'issues' not in json_response:
         raise TaskUploaderException('Failed to get task list.')
 
-    task_list = []
     for task in json_response['issues']:
         task_item = dict()
         if 'key' in task:
@@ -228,6 +237,7 @@ def handle_transitions(chat_id):
 
 
 def read_push_analytics():
+    logging.info('Reading push analytics...')
     spreadsheet_id = '1-2szkn5ZE1E1CUoH5iOGKj-eJ003sC-o6ykaHapH0TA'
     range_name = 'Check!A3:L'
     result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
