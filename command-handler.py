@@ -26,6 +26,9 @@ ERROR_MESSAGE = 'Ошибка'
 WRONG_INPUT_DATA_MESSAGE = 'Неверный формат команды.'
 NO_TASKS = 'Задачи отсутствуют.'
 NO_TASK = 'Задача {task_id} отсутствует.'
+NO_VIDEOLINK = 'Ссылка на видео комнату не задана.'
+NO_PUSH_ANALYTICS = 'Данные отсутствуют.'
+DEMO_MESSAGE = '********************\n* ДЕМОНСТРАЦИЯ *\n********************'
 
 EMOJI_BACKLOG = u'\u23FA\uFE0F'
 EMOJI_TODO = u'\u23F8\uFE0F'
@@ -46,12 +49,22 @@ dynamo_db = boto3.resource('dynamodb')
 
 # Обработчик входящих сообщений
 def handle(event, context):
-    update = telebot.types.Update.de_json(str(event).replace("'", "\"").replace("True", "true"))
+    update = telebot.types.Update.de_json(str(event).replace("'", "\"").replace("True", "true").replace("False", "false"))
     if update.message:
         bot.process_new_messages([update.message])
     if update.callback_query:
         bot.process_new_callback_query([update.callback_query])
     time.sleep(1.5)
+
+
+# Обработчик команд '/demo'.
+@bot.message_handler(commands=['demo'])
+def handle_demo(message):
+    try:
+        bot.send_message(message.chat.id, DEMO_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
 # Обработчик команд '/settmz'.
@@ -166,7 +179,16 @@ def handle_start_help(message):
                    '\n' \
                    '/<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (порядок следования статусов изложен в описании команды /tasks).' \
                    '\n' \
-                   '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.'.format(
+                   '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.' \
+                   '\n' \
+                   '\n' \
+                   '/addvideolink <link> - добавить ссылку на видео комнату.' \
+                   '\n' \
+                   '\n' \
+                   '/videolink или /chat - показать ссылку на видео комнату.' \
+                   '\n' \
+                   '\n' \
+                   '/showpushanalytics - показать аналетику по PUSH уведомлениям.'.format(
         pre_notification_offset_in_minutes=PRE_NOTIFICATION_OFFSET_IN_MINUTES, indent=DEFAULT_INDENT, backlog_emoji=EMOJI_BACKLOG,
         todo_emoji=EMOJI_TODO, in_progress_emoji=EMOJI_IN_PROGRESS, code_review_emoji=EMOJI_CODE_REVIEW, done_emoji=EMOJI_DONE)
 
@@ -347,6 +369,54 @@ def handle_tonextstatus(message):
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
+# Обработчик команд '/addvideolink'.
+@bot.message_handler(commands=['addvideolink'])
+def handle_addvideolink(message):
+    try:
+        pattern_string = "^/.*? (.*)?$"
+        pattern = re.compile(pattern_string)
+        match_result = pattern.match(message.text)
+        if match_result:
+            chat_id = get_chat_id(message)
+            data = get_chat_data(chat_id)
+            data['videolink'] = match_result.group(1)
+            save_chat_data(chat_id, data)
+            bot.send_message(message.chat.id, OK_MESSAGE)
+        else:
+            bot.send_message(message.chat.id, WRONG_INPUT_DATA_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/chat'.
+@bot.message_handler(commands=['chat'])
+def handle_chat(message):
+    try:
+        show_videolink(get_chat_id(message))
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/videolink'.
+@bot.message_handler(commands=['videolink'])
+def handle_videolink(message):
+    try:
+        show_videolink(get_chat_id(message))
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+def show_videolink(chat_id):
+    data = get_chat_data(chat_id)
+    if 'videolink' in data:
+        bot.send_message(chat_id, data['videolink'])
+    else:
+        bot.send_message(chat_id, NO_VIDEOLINK)
+
+
 def create_yes_no_keyboard(task_id, status_name):
     keyboard = types.InlineKeyboardMarkup()
     yes_button = types.InlineKeyboardButton(text="Да", callback_data=create_callback_data('yes', task_id, status_name))
@@ -429,6 +499,102 @@ def callback_inline(call):
                 bot.send_message(chat_id, ERROR_MESSAGE)
     except Exception:
         print(traceback.format_exc())
+
+
+# Обработчик команд '/showpushanalytics'.
+@bot.message_handler(commands=['showpushanalytics'])
+def handle_showpushanalytics(message):
+    try:
+        show_push_analytics(message.chat.id)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+def show_push_analytics(chat_id):
+    data = get_chat_data(chat_id)
+    if 'push_analytics' in data:
+        push_analytics_data = data['push_analytics']
+        if push_analytics_data:
+            sb = ['PUSH Analytics:\n']
+
+            if 'date' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('дата: ')
+                sb.append(push_analytics_data['date'])
+                sb.append('\n')
+
+            if 'delivered_android' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('доставлено Android: ')
+                sb.append(push_analytics_data['delivered_android'])
+                sb.append('\n')
+
+            if 'delivered_ios' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('доставлено iOs: ')
+                sb.append(push_analytics_data['delivered_ios'])
+                sb.append('\n')
+
+            if 'sent_android' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('отправлено Android: ')
+                sb.append(push_analytics_data['sent_android'])
+                sb.append('\n')
+
+            if 'sent_ios' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('отправлено iOs: ')
+                sb.append(push_analytics_data['sent_ios'])
+                sb.append('\n')
+
+            if 'with_error_android' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('с ошибкой Android: ')
+                sb.append(push_analytics_data['with_error_android'])
+                sb.append('\n')
+
+            if 'with_error_ios' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('с ошибкой iOs: ')
+                sb.append(push_analytics_data['with_error_ios'])
+                sb.append('\n')
+
+            if 'duplicated_with_sms_android' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('продублированно СМС Android: ')
+                sb.append(push_analytics_data['duplicated_with_sms_android'])
+                sb.append('\n')
+
+            if 'duplicated_with_sms_ios' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('продублированно СМС iOs: ')
+                sb.append(push_analytics_data['duplicated_with_sms_ios'])
+                sb.append('\n')
+
+            if 'сonnected_clients' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('подключено (клиентов): ')
+                sb.append(push_analytics_data['сonnected_clients'])
+                sb.append('\n')
+
+            if 'disconnected_clients' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('отключено (клиентов): ')
+                sb.append(push_analytics_data['disconnected_clients'])
+                sb.append('\n')
+
+            if 'updated_push_tokens' in push_analytics_data:
+                sb.append(DEFAULT_INDENT)
+                sb.append('обновлено PUSH token: ')
+                sb.append(push_analytics_data['updated_push_tokens'])
+                sb.append('\n')
+
+            bot.send_message(chat_id, ''.join(sb))
+        else:
+            bot.send_message(chat_id, NO_PUSH_ANALYTICS)
+    else:
+        bot.send_message(chat_id, NO_PUSH_ANALYTICS)
 
 
 def get_task(task_id, tasks):

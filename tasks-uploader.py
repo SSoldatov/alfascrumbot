@@ -3,7 +3,10 @@ import logging
 from itertools import repeat
 from json import JSONDecodeError
 
+import apiclient
+import httplib2
 import requests
+from oauth2client.service_account import ServiceAccountCredentials
 from requests import ReadTimeout
 
 CHAT_ID = ''
@@ -17,14 +20,19 @@ SPRINT_TASK_STATUSES = ', '.join("'{0}'".format(x) for x in TASK_SORTING_ORDER)
 GET_SPRINT_TASKS_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue?jql=status in ({' \
                        'task_statuses})' \
                        '&fields=summary,assignee,status,parent'
-
+GOOGLE_DOCS_CREDENTIALS_FILE = 'google-docs-credentials.json'
 TASK_TRANSITIONS_URL = '{jira_host}/rest/api/latest/issue/{task_id}/transitions'
-
 TASKS_UPLOAD_URL = 'https://wb9fbkheca.execute-api.us-east-2.amazonaws.com/v0/upload'
 GET_TASK_TRANSITIONS_URL = 'https://wb9fbkheca.execute-api.us-east-2.amazonaws.com/v0/transitions'
 DEFAULT_TIMEOUT_IN_SECONDS = 10
 
 logging.basicConfig(level=logging.INFO)
+
+credentials = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_DOCS_CREDENTIALS_FILE,
+                                                               ['https://www.googleapis.com/auth/spreadsheets',
+                                                                'https://www.googleapis.com/auth/drive'])
+httpAuth = credentials.authorize(httplib2.Http())
+service = apiclient.discovery.build('sheets', 'v4', http=httpAuth)
 
 
 def get_active_sprint_id():
@@ -135,16 +143,19 @@ def check_response_status(response):
         raise TaskUploaderException('Error response status: {}'.format(response.status_code))
 
 
-def task_list_to_json(tasks, chat_id):
+def to_data_json(chat_id, tasks, push_analytics):
     dictionary = dict()
     dictionary['chat_id'] = chat_id
-    dictionary['tasks'] = tasks
+    data = dict()
+    dictionary['data'] = data
+    data['tasks'] = tasks
+    data['push_analytics'] = push_analytics
     return json.dumps(dictionary)
 
 
-def upload_tasks(tasks_json):
-    logging.info('Uploading tasks...')
-    response = requests.post(url=TASKS_UPLOAD_URL, data=tasks_json)
+def upload_data(data_json):
+    logging.info('Uploading data...')
+    response = requests.post(url=TASKS_UPLOAD_URL, data=data_json)
     check_response_status(response)
 
 
@@ -216,6 +227,58 @@ def handle_transitions(chat_id):
             put_task_to_next_transition(task_id, count)
 
 
+def read_push_analytics():
+    spreadsheet_id = '1-2szkn5ZE1E1CUoH5iOGKj-eJ003sC-o6ykaHapH0TA'
+    range_name = 'Check!A3:L'
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
+    values = result.get('values')
+
+    if not values:
+        return None
+
+    row = values[0]
+
+    result = {}
+
+    if len(row) > 0:
+        result['date'] = row[0]
+
+    if len(row) > 1:
+        result['delivered_android'] = row[1]
+
+    if len(row) > 2:
+        result['delivered_ios'] = row[2]
+
+    if len(row) > 3:
+        result['sent_android'] = row[3]
+
+    if len(row) > 4:
+        result['sent_ios'] = row[4]
+
+    if len(row) > 5:
+        result['with_error_android'] = row[5]
+
+    if len(row) > 6:
+        result['with_error_ios'] = row[6]
+
+    if len(row) > 7:
+        result['duplicated_with_sms_android'] = row[7]
+
+    if len(row) > 8:
+        result['duplicated_with_sms_ios'] = row[8]
+
+    if len(row) > 9:
+        result['сonnected_clients'] = row[9]
+
+    if len(row) > 10:
+        result['disconnected_clients'] = row[10]
+
+    if len(row) > 11:
+        result['updated_push_tokens'] = row[11]
+
+    return result
+
+
 class TaskUploaderException(BaseException):
     pass
 
@@ -223,7 +286,8 @@ class TaskUploaderException(BaseException):
 if __name__ == "__main__":
     try:
         handle_transitions(CHAT_ID)
-        upload_tasks(task_list_to_json(to_sort_tasks(to_group_tasks(get_tasks(get_active_sprint_id()))), CHAT_ID))
+        upload_data(to_data_json(chat_id=CHAT_ID, tasks=to_sort_tasks(to_group_tasks(get_tasks(get_active_sprint_id()))),
+                                 push_analytics=read_push_analytics()))
     except TaskUploaderException as ex:
         logging.error(ex)
     except BaseException as ex:

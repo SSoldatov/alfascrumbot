@@ -13,7 +13,8 @@ def handle(event, context):
     else:
         data = dict()
 
-    data['tasks'] = event['tasks']
+    data['tasks'] = event['data']['tasks']
+    data['push_analytics'] = event['data']['push_analytics']
 
     if 'transitions' in data:
         del data['transitions']
