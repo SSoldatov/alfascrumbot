@@ -177,7 +177,7 @@ def handle_start_help(message):
                    '/removetasks - удалить все загруженные для текущего чата задачи.' \
                    '\n' \
                    '\n' \
-                   '/<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи на следующий (порядок следования статусов изложен в описании команды /tasks).' \
+                   '/<ИДЕНТИФИКАТОР ЗАДАЧИ> - изменить статус задачи (вместо символа \'-\' используется \'_\').' \
                    '\n' \
                    '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.' \
                    '\n' \
@@ -354,10 +354,9 @@ def handle_tonextstatus(message):
                     task = get_task(task_id, tasks)
                     if task:
                         next_status = get_next_status(task['status_name'])
-                        yes_no_keyboard = create_yes_no_keyboard(task_id, next_status)
-                        bot.send_message(chat_id, "Сменить статус задачи {task_key} на {next_status}?".format(task_key=task_id,
-                                                                                                              next_status=next_status),
-                                         reply_markup=yes_no_keyboard)
+                        statuses_keyboard = create_statuses_keyboard(task_id, next_status)
+                        bot.send_message(chat_id, "Выберите новый статус для задачи {task_key}:".format(task_key=task_id),
+                                         reply_markup=statuses_keyboard)
                     else:
                         bot.send_message(message.chat.id, NO_TASK.format(task_id=task_id))
             else:
@@ -409,56 +408,6 @@ def handle_videolink(message):
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
-def show_videolink(chat_id):
-    data = get_chat_data(chat_id)
-    if 'videolink' in data:
-        bot.send_message(chat_id, data['videolink'])
-    else:
-        bot.send_message(chat_id, NO_VIDEOLINK)
-
-
-def create_yes_no_keyboard(task_id, status_name):
-    keyboard = types.InlineKeyboardMarkup()
-    yes_button = types.InlineKeyboardButton(text="Да", callback_data=create_callback_data('yes', task_id, status_name))
-    no_button = types.InlineKeyboardButton(text="Нет", callback_data=create_callback_data('no'))
-    keyboard.add(yes_button)
-    keyboard.add(no_button)
-    return keyboard
-
-
-def create_callback_data(action, task_id=None, status_name=None):
-    return "{action}:{task_id}:{status_name}:{time}".format(action=action, task_id=task_id, status_name=status_name,
-                                                            time=get_current_time_in_second())
-
-
-def get_current_time_in_second():
-    return int(round(time.time()))
-
-
-def change_task_status(task_id, chat_id, next_status):
-    data = get_chat_data(chat_id)
-    if 'tasks' in data:
-        tasks = data['tasks']
-        if tasks:
-            task = get_task(task_id, tasks)
-            if task:
-                current_status = task['status_name']
-                if current_status == next_status:
-                    return False
-                task['status_name'] = next_status
-                if not 'transitions' in data:
-                    data['transitions'] = dict()
-                transitions = data['transitions']
-                transitions_count = 0
-                if task_id in transitions:
-                    transitions_count = transitions[task_id]
-                transitions_count = transitions_count + 1
-                transitions[task_id] = transitions_count
-                save_chat_data(chat_id, data)
-                return True
-    return False
-
-
 # Обработчик команд '/removetransitions'.
 @bot.message_handler(commands=['removetransitions'])
 def handle_removetransitions(message):
@@ -481,17 +430,13 @@ def callback_inline(call):
             chat_id = call.message.chat.id
             try:
                 data = call.data.split(':')
-                action = data[0]
-                task_id = data[1]
-                status_name = data[2]
-                confirm_time = int(data[3])
+                task_id = data[0]
+                status_name = data[1]
+                confirm_time = int(data[2])
                 if get_current_time_in_second() - confirm_time <= STATUS_CHANGE_CONFIRM_TIME_IN_SECOND:
-                    if action == "yes":
-                        if change_task_status(task_id, chat_id, status_name):
-                            bot.send_message(chat_id, "Статус задачи {task_id} изменен на {status_name}".format(task_id=task_id,
-                                                                                                                status_name=status_name))
-                        else:
-                            bot.send_message(chat_id, "Статус задачи не изменен")
+                    if change_task_status(task_id, chat_id, status_name):
+                        bot.send_message(chat_id, "Статус задачи {task_id} изменен на {status_name}".format(task_id=task_id,
+                                                                                                            status_name=status_name))
                     else:
                         bot.send_message(chat_id, "Статус задачи не изменен")
             except Exception:
@@ -737,6 +682,63 @@ def save_chat_data(chat_id, data):
 
 def get_chat_id(message):
     return str(message.chat.id)
+
+
+def calculate_transitions_delta(current_status, next_status):
+    return TASK_SORTING_ORDER.index(next_status.upper()) - TASK_SORTING_ORDER.index(current_status.upper())
+
+
+def get_available_statuses(current_status):
+    return TASK_SORTING_ORDER[TASK_SORTING_ORDER.index(current_status.upper()):len(TASK_SORTING_ORDER)]
+
+
+def show_videolink(chat_id):
+    data = get_chat_data(chat_id)
+    if 'videolink' in data:
+        bot.send_message(chat_id, data['videolink'])
+    else:
+        bot.send_message(chat_id, NO_VIDEOLINK)
+
+
+def create_statuses_keyboard(task_id, next_status_name):
+    keyboard = types.InlineKeyboardMarkup()
+    for status_name in get_available_statuses(next_status_name):
+        status_button = types.InlineKeyboardButton(text=status_name, callback_data=create_callback_data(task_id, status_name))
+        keyboard.add(status_button)
+    return keyboard
+
+
+def create_callback_data(task_id, status_name):
+    return "{task_id}:{status_name}:{time}".format(task_id=task_id, status_name=status_name, time=get_current_time_in_second())
+
+
+def get_current_time_in_second():
+    return int(round(time.time()))
+
+
+def change_task_status(task_id, chat_id, next_status):
+    data = get_chat_data(chat_id)
+    if 'tasks' in data:
+        tasks = data['tasks']
+        if tasks:
+            task = get_task(task_id, tasks)
+            if task:
+                current_status = task['status_name']
+                if current_status == next_status:
+                    return False
+                transitions_delta = calculate_transitions_delta(current_status, next_status)
+                task['status_name'] = next_status
+                if not 'transitions' in data:
+                    data['transitions'] = dict()
+                transitions = data['transitions']
+                transitions_count = 0
+                if task_id in transitions:
+                    transitions_count = transitions[task_id]
+                transitions_count = transitions_count + transitions_delta
+                transitions[task_id] = transitions_count
+                save_chat_data(chat_id, data)
+                return True
+    return False
 
 
 if __name__ == "__main__":
