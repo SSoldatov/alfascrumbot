@@ -15,8 +15,7 @@ JIRA_USER_NAME = ''
 JIRA_USER_PASSWORD = ''
 JIRA_HOST = 'http://jira'
 GET_SPRINT_ID_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint?state=active'.format(jira_host=JIRA_HOST, board_id=BOARD_ID)
-TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW']
-SPRINT_TASK_STATUSES = ', '.join("'{0}'".format(x) for x in TASK_SORTING_ORDER)
+TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'DONE']
 GET_SPRINT_TASKS_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue?jql=status in ({' \
                        'task_statuses})' \
                        '&fields=summary,assignee,status,parent'
@@ -33,6 +32,12 @@ credentials = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_DOCS_CREDE
                                                                 'https://www.googleapis.com/auth/drive'])
 httpAuth = credentials.authorize(httplib2.Http())
 service = apiclient.discovery.build('sheets', 'v4', http=httpAuth)
+
+
+def get_sprint_task_statuses_without_done():
+    statuses = TASK_SORTING_ORDER.copy()
+    statuses.remove('DONE')
+    return ', '.join("'{0}'".format(x) for x in statuses)
 
 
 def get_active_sprint_id():
@@ -79,7 +84,8 @@ def get_tasks(sprint_id):
     if sprint_id is None:
         return task_list
 
-    url = GET_SPRINT_TASKS_URL.format(jira_host=JIRA_HOST, board_id=BOARD_ID, sprint_id=sprint_id, task_statuses=SPRINT_TASK_STATUSES)
+    url = GET_SPRINT_TASKS_URL.format(jira_host=JIRA_HOST, board_id=BOARD_ID, sprint_id=sprint_id,
+                                      task_statuses=get_sprint_task_statuses_without_done())
     response = requests.get(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD))
     json_response = parse_json(response.text)
 
@@ -106,6 +112,7 @@ def get_tasks(sprint_id):
                     task_item['parent_key'] = parent.get('key', None)
                     if parent['fields'] is not None:
                         task_item['parent_summary'] = parent['fields'].get('summary', None)
+                        task_item['parent_status'] = parent['fields'].get('status', None).get('name', None)
         task_list.append(task_item)
 
     check_response_status(response)
@@ -117,7 +124,11 @@ def to_group_tasks(tasks):
     for task in tasks:
         if 'parent_key' in task:
             if task['parent_key'] not in dictionary:
-                dictionary[task['parent_key']] = task
+                parent_task = dict()
+                parent_task['key'] = task['parent_key']
+                parent_task['summary'] = task['parent_summary']
+                parent_task['status_name'] = task['parent_status']
+                dictionary[task['parent_key']] = parent_task
             if 'sub_tasks' not in dictionary[task['parent_key']]:
                 dictionary[task['parent_key']].setdefault('sub_tasks', [])
             dictionary[task['parent_key']]['sub_tasks'].append(task)
