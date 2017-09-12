@@ -13,11 +13,12 @@ EMOJI_BACKLOG = u'\u23FA\uFE0F'
 EMOJI_TODO = u'\u23F8\uFE0F'
 EMOJI_IN_PROGRESS = u'\u25B6\uFE0F'
 EMOJI_CODE_REVIEW = u'\u23EF\uFE0F'
+EMOJI_TESTING = u'\u2194\uFE0F'
 EMOJI_DONE = u'\u2714\uFE0F'
 
 DEFAULT_INDENT = '    '
 
-TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'DONE']
+TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'TESTING', 'DONE']
 
 bot = telebot.TeleBot(TOKEN)
 dynamo_db = boto3.resource('dynamodb')
@@ -49,7 +50,7 @@ def add_leading_zero(hour, width=2):
     return str(hour).zfill(width)
 
 
-def get_emoji_alias_name(status_name):
+def get_emoji_code(status_name):
     status_name = status_name.upper()
     if status_name == 'BACKLOG':
         return EMOJI_BACKLOG
@@ -59,6 +60,8 @@ def get_emoji_alias_name(status_name):
         return EMOJI_IN_PROGRESS
     elif status_name == 'CODE REVIEW':
         return EMOJI_CODE_REVIEW
+    elif status_name == 'TESTING':
+        return EMOJI_TESTING
     elif status_name == 'DONE':
         return EMOJI_DONE
     else:
@@ -73,7 +76,7 @@ def show_tasks(chat_id):
             sb = []
             for task in tasks:
                 sb.append('*')
-                sb.append(get_emoji_alias_name(task['status_name']))
+                sb.append(get_emoji_code(task['status_name']))
                 sb.append(' ')
                 sb.append(task['summary'])
                 sb.append('*')
@@ -89,7 +92,7 @@ def show_tasks(chat_id):
                 if 'sub_tasks' in task:
                     for sub_task in task['sub_tasks']:
                         sb.append(DEFAULT_INDENT)
-                        sb.append(get_emoji_alias_name(sub_task['status_name']))
+                        sb.append(get_emoji_code(sub_task['status_name']))
                         sb.append(' ')
                         sb.append('*')
                         sb.append(sub_task['summary'])
