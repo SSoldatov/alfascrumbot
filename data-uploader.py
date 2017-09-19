@@ -19,6 +19,7 @@ TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'TESTING'
 GET_SPRINT_TASKS_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue?jql=status in ({' \
                        'task_statuses})' \
                        '&fields=summary,assignee,status,parent'
+CREATE_ISSUE_URL = '{jira_host}/rest/api/2/issue/'
 GOOGLE_DOCS_CREDENTIALS_FILE = 'google-docs-credentials.json'
 TASK_TRANSITIONS_URL = '{jira_host}/rest/api/latest/issue/{task_id}/transitions'
 TASKS_UPLOAD_URL = 'https://wb9fbkheca.execute-api.us-east-2.amazonaws.com/v0/upload'
@@ -292,10 +293,10 @@ def read_push_analytics():
         result['saved_bank'] = row[9]
 
     if len(row) > 10 and row[10]:
-        result['сonnected_clients'] = row[10]
+        result['total_android'] = row[10]
 
     if len(row) > 11 and row[11]:
-        result['disconnected_clients'] = row[11]
+        result['total_ios'] = row[11]
 
     if len(row) > 12 and row[12]:
         result['updated_push_tokens'] = row[12]
@@ -305,6 +306,21 @@ def read_push_analytics():
 
 class TaskUploaderException(BaseException):
     pass
+
+
+def create_issue(project_key, summary, description, issue_type):
+    logging.info('Creating a task in jira...')
+    url = CREATE_ISSUE_URL.format(jira_host=JIRA_HOST)
+    headers = {'Content-type': 'application/json'}
+    data = {"fields": {"project": {"key": project_key}, "summary": summary, "description": description, "issuetype": {"name": issue_type}}}
+    response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data), headers=headers,
+                             timeout=DEFAULT_TIMEOUT_IN_SECONDS)
+    check_response_status(response)
+    json_response = parse_json(response.text)
+    if 'key' in json_response:
+        return json_response['key']
+    else:
+        return None
 
 
 if __name__ == "__main__":

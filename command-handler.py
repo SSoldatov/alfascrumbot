@@ -527,16 +527,16 @@ def show_push_analytics(chat_id):
                 sb.append(push_analytics_data['saved_bank'])
                 sb.append('\n')
 
-            if 'сonnected_clients' in push_analytics_data:
+            if 'total_android' in push_analytics_data:
                 sb.append(DEFAULT_INDENT)
-                sb.append('подключено (клиентов): ')
-                sb.append(push_analytics_data['сonnected_clients'])
+                sb.append('всего (Android): ')
+                sb.append(push_analytics_data['total_android'])
                 sb.append('\n')
 
-            if 'disconnected_clients' in push_analytics_data:
+            if 'total_ios' in push_analytics_data:
                 sb.append(DEFAULT_INDENT)
-                sb.append('отключено (клиентов): ')
-                sb.append(push_analytics_data['disconnected_clients'])
+                sb.append('всего (iOs): ')
+                sb.append(push_analytics_data['total_ios'])
                 sb.append('\n')
 
             if 'updated_push_tokens' in push_analytics_data:
