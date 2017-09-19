@@ -342,10 +342,10 @@ def handle_tasks(message):
 
 
 # Обработчик команд '/tonextstatus'.
-@bot.message_handler(regexp="^/[A-Z, a-z]*_[0-9]*$")
+@bot.message_handler(regexp="^/[A-Z, a-z]*_[0-9]*.*$")
 def handle_tonextstatus(message):
     try:
-        pattern_string = "^/([A-Z, a-z]*_[0-9]*)$"
+        pattern_string = "^/([A-Z, a-z]*_[0-9]*).*$"
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
