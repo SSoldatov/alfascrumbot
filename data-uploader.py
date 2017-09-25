@@ -9,10 +9,11 @@ import requests
 from oauth2client.service_account import ServiceAccountCredentials
 from requests import ReadTimeout
 
-CHAT_ID = ''
-BOARD_ID = ''
-JIRA_USER_NAME = ''
-JIRA_USER_PASSWORD = ''
+from config import CHAT_ID
+from config import BOARD_ID
+from config import JIRA_USER_NAME
+from config import JIRA_USER_PASSWORD
+
 JIRA_HOST = 'http://jira'
 GET_SPRINT_ID_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint?state=active'.format(jira_host=JIRA_HOST, board_id=BOARD_ID)
 TASK_SORTING_ORDER = ['BACKLOG', 'TODO', 'IN PROGRESS', 'CODE REVIEW', 'TESTING', 'DONE']
@@ -44,7 +45,8 @@ def get_sprint_task_statuses_without_done():
 def get_active_sprint_id():
     try:
         logging.info('Getting sprint_id...')
-        response = requests.get(url=GET_SPRINT_ID_URL, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), timeout=DEFAULT_TIMEOUT_IN_SECONDS)
+        response = requests.get(url=GET_SPRINT_ID_URL, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD),
+                                timeout=DEFAULT_TIMEOUT_IN_SECONDS)
         check_response_status(response)
 
         json_response = parse_json(response.text)
@@ -188,7 +190,8 @@ def put_task_to_next_transition(task_id, repeat_count=1):
             url = TASK_TRANSITIONS_URL.format(jira_host=JIRA_HOST, task_id=task_id)
             headers = {'Content-type': 'application/json'}
             data = {'transition': {'id': transition_id}}
-            response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data), headers=headers)
+            response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data),
+                                     headers=headers)
             check_response_status(response)
         logging.info('Done.')
 
