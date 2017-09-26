@@ -7,23 +7,22 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 import telebot
-from telebot import types
-from config import TOKEN
-from commons import TASK_SORTING_ORDER
-from commons import EMOJI_BACKLOG
-from commons import EMOJI_TODO
-from commons import EMOJI_IN_PROGRESS
-from commons import EMOJI_CODE_REVIEW
-from commons import EMOJI_TESTING
-from commons import EMOJI_DONE
 from commons import DEFAULT_INDENT
+from commons import EMOJI_BACKLOG
+from commons import EMOJI_CODE_REVIEW
+from commons import EMOJI_DONE
+from commons import EMOJI_IN_PROGRESS
+from commons import EMOJI_TESTING
+from commons import EMOJI_TODO
 from commons import NO_TASK
 from commons import NO_TASKS
-
+from commons import TASK_SORTING_ORDER
 from commons import add_leading_zero
 from commons import get_chat_data
 from commons import get_data
 from commons import show_tasks
+from config import TOKEN
+from telebot import types
 
 PRE_NOTIFICATION_OFFSET_IN_MINUTES = 1
 
@@ -73,7 +72,7 @@ def handle_demo(message):
 @bot.message_handler(commands=['settmz'])
 def handle_set_timezone_offset(message):
     try:
-        pattern_string = "^/.*? ([+-])([01]?[0-9]|2[0-3])$"
+        pattern_string = '^/.*? ([+-])([01]?[0-9]|2[0-3])$'
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -186,6 +185,12 @@ def handle_start_help(message):
                    '    -данные об изменениях статусов будут добавлены в JIRA при следующей синхронизации.' \
                    '\n' \
                    '\n' \
+                   '/addtask <title> - добавить новую задачу в беклог.' \
+                   '\n' \
+                   '\n' \
+                   '/backlog - вывести список добавленных в беклог задач.' \
+                   '\n' \
+                   '\n' \
                    '/addvideolink <link> - добавить ссылку на видео комнату.' \
                    '\n' \
                    '\n' \
@@ -204,7 +209,7 @@ def handle_start_help(message):
 @bot.message_handler(commands=['add'])
 def handle_add(message):
     try:
-        pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])( ([^ ]*))?( ([^ ]*))?$"
+        pattern_string = '^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])( ([^ ]*))?( ([^ ]*))?$'
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -244,7 +249,7 @@ def handle_add(message):
 @bot.message_handler(commands=['remove'])
 def handle_remove(message):
     try:
-        pattern_string = "^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])$"
+        pattern_string = '^/.*? ([01]?[0-9]|2[0-3]):([0-5][0-9])$'
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -342,11 +347,50 @@ def handle_tasks(message):
         bot.send_message(message.chat.id, ERROR_MESSAGE)
 
 
-# Обработчик команд '/tonextstatus'.
-@bot.message_handler(regexp="^/[A-Z, a-z]*_[0-9]*.*$")
-def handle_tonextstatus(message):
+# Обработчик команд '/addtask'.
+@bot.message_handler(commands=['addtask'])
+def handle_add_task(message):
     try:
-        pattern_string = "^/([A-Z, a-z]*_[0-9]*).*$"
+        pattern_string = '^/.*? (.*)$'
+        pattern = re.compile(pattern_string)
+        match_result = pattern.match(message.text)
+        if match_result:
+            chat_id = get_chat_id(message)
+            data = get_chat_data(chat_id)
+            if not 'backlog' in data:
+                data['backlog'] = []
+            data['backlog'].append(match_result.group(1))
+            save_chat_data(chat_id, data)
+            bot.send_message(chat_id, OK_MESSAGE)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/backlog'.
+@bot.message_handler(commands=['backlog'])
+def handle_add_task(message):
+    try:
+        chat_id = get_chat_id(message)
+        data = get_chat_data(chat_id)
+        if 'backlog' in data:
+            sb = []
+            for summary in data['backlog']:
+                sb.append(summary)
+                sb.append('\n')
+            bot.send_message(message.chat.id, ''.join(sb))
+        else:
+            bot.send_message(message.chat.id, NO_TASKS)
+    except Exception:
+        print(traceback.format_exc())
+        bot.send_message(message.chat.id, ERROR_MESSAGE)
+
+
+# Обработчик команд '/changestatus'.
+@bot.message_handler(regexp='^/[A-Z, a-z]*_[0-9]*.*$')
+def handle_change_status(message):
+    try:
+        pattern_string = '^/([A-Z, a-z]*_[0-9]*).*$'
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -377,7 +421,7 @@ def handle_tonextstatus(message):
 @bot.message_handler(commands=['addvideolink'])
 def handle_addvideolink(message):
     try:
-        pattern_string = "^/.*? (.*)?$"
+        pattern_string = '^/.*? (.*)?$'
         pattern = re.compile(pattern_string)
         match_result = pattern.match(message.text)
         if match_result:
@@ -455,7 +499,7 @@ def callback_inline(call):
 @bot.message_handler(commands=['showpushanalytics'])
 def handle_showpushanalytics(message):
     try:
-        show_push_analytics(message.chat.id)
+        show_push_analytics(get_chat_id(message))
     except Exception:
         print(traceback.format_exc())
         bot.send_message(message.chat.id, ERROR_MESSAGE)
@@ -565,13 +609,13 @@ def get_task(task_id, tasks):
 
 
 def hour_to_utc(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) - datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def hour_to_timezone(hour, time_zone_offset):
-    return (
-    datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(hours=int(time_zone_offset))).hour
+    return (datetime.datetime.combine(datetime.date.today(), datetime.time(hour=int(hour))) + datetime.timedelta(
+        hours=int(time_zone_offset))).hour
 
 
 def read_offset(chat_id):

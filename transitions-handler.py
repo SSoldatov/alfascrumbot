@@ -10,11 +10,6 @@ def handle(event, context):
     response = table.get_item(Key={'chat_id': chat_id})
 
     if 'Item' in response:
-        data = response['Item']['data']
-    else:
-        data = dict()
-
-    if 'transitions' in data:
-        return data['transitions']
+        return response['Item']['data']
     else:
         return None

@@ -6,13 +6,14 @@ from json import JSONDecodeError
 import apiclient
 import httplib2
 import requests
-from oauth2client.service_account import ServiceAccountCredentials
-from requests import ReadTimeout
-
-from config import CHAT_ID
+from constants import TASK_PROJECT_KEY
+from constants import TASK_TYPE_TASK
 from config import BOARD_ID
+from config import CHAT_ID
 from config import JIRA_USER_NAME
 from config import JIRA_USER_PASSWORD
+from oauth2client.service_account import ServiceAccountCredentials
+from requests import ReadTimeout
 
 JIRA_HOST = 'http://jira'
 GET_SPRINT_ID_URL = '{jira_host}/rest/agile/1.0/board/{board_id}/sprint?state=active'.format(jira_host=JIRA_HOST, board_id=BOARD_ID)
@@ -45,8 +46,7 @@ def get_sprint_task_statuses_without_done():
 def get_active_sprint_id():
     try:
         logging.info('Getting sprint_id...')
-        response = requests.get(url=GET_SPRINT_ID_URL, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD),
-                                timeout=DEFAULT_TIMEOUT_IN_SECONDS)
+        response = requests.get(url=GET_SPRINT_ID_URL, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), timeout=DEFAULT_TIMEOUT_IN_SECONDS)
         check_response_status(response)
 
         json_response = parse_json(response.text)
@@ -190,8 +190,7 @@ def put_task_to_next_transition(task_id, repeat_count=1):
             url = TASK_TRANSITIONS_URL.format(jira_host=JIRA_HOST, task_id=task_id)
             headers = {'Content-type': 'application/json'}
             data = {'transition': {'id': transition_id}}
-            response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data),
-                                     headers=headers)
+            response = requests.post(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD), data=json.dumps(data), headers=headers)
             check_response_status(response)
         logging.info('Done.')
 
@@ -234,8 +233,8 @@ def get_next_status(current_status):
     return TASK_SORTING_ORDER[next_index]
 
 
-def get_transitions(chat_id):
-    logging.info('Getting transitions...')
+def get_chat_data(chat_id):
+    logging.info('Getting chat data...')
     params = {'chat_id': chat_id}
     response = requests.get(url=GET_TASK_TRANSITIONS_URL, params=params)
     check_response_status(response)
@@ -243,12 +242,25 @@ def get_transitions(chat_id):
     return json_response
 
 
-def handle_transitions(chat_id):
-    transitions = get_transitions(chat_id)
-    if transitions:
-        for task_id in transitions:
-            count = transitions[task_id]
-            put_task_to_next_transition(task_id, count)
+def handle_transitions(transitions):
+    for task_id in transitions:
+        count = transitions[task_id]
+        put_task_to_next_transition(task_id, count)
+
+
+def handle_backlog(backlog):
+    for summary in backlog:
+        create_issue(summary)
+
+
+def handle_chat_data(chat_id):
+    chat_data = get_chat_data(chat_id)
+    if not chat_data:
+        return
+    if 'transitions' in chat_data:
+        handle_transitions(chat_data['transitions'])
+    if 'backlog' in chat_data:
+        handle_backlog(chat_data['backlog'])
 
 
 def read_push_analytics():
@@ -311,7 +323,7 @@ class TaskUploaderException(BaseException):
     pass
 
 
-def create_issue(project_key, summary, description, issue_type):
+def create_issue(summary, project_key=TASK_PROJECT_KEY, description='', issue_type=TASK_TYPE_TASK):
     logging.info('Creating a task in jira...')
     url = CREATE_ISSUE_URL.format(jira_host=JIRA_HOST)
     headers = {'Content-type': 'application/json'}
@@ -328,7 +340,7 @@ def create_issue(project_key, summary, description, issue_type):
 
 if __name__ == "__main__":
     try:
-        handle_transitions(CHAT_ID)
+        handle_chat_data(CHAT_ID)
         upload_data(to_data_json(chat_id=CHAT_ID, tasks=to_sort_tasks(to_group_tasks(get_tasks(get_active_sprint_id()))),
                                  push_analytics=read_push_analytics()))
     except TaskUploaderException as ex:

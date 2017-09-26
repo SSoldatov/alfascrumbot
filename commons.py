@@ -36,7 +36,7 @@ def is_last_status(current_status):
 
 
 def get_chat_data(chat_id):
-    table = dynamo_db.Table("chat_data")
+    table = dynamo_db.Table('chat_data')
     return get_data(table.get_item(Key={'chat_id': chat_id}))
 
 

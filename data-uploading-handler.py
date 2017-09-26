@@ -19,4 +19,7 @@ def handle(event, context):
     if 'transitions' in data:
         del data['transitions']
 
+    if 'backlog' in data:
+        del data['backlog']
+
     table.put_item(Item={'chat_id': chat_id, 'data': data})
