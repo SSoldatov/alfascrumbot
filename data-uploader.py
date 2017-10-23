@@ -125,32 +125,49 @@ def get_tasks(sprint_id):
 def to_group_tasks(tasks):
     dictionary = dict()
     for task in tasks:
-        if 'parent_key' in task:
-            if task['parent_key'] not in dictionary:
-                parent_task = dict()
-                parent_task['key'] = task['parent_key']
-                parent_task['summary'] = task['parent_summary']
-                parent_task['status_name'] = task['parent_status']
-                dictionary[task['parent_key']] = parent_task
-            if 'sub_tasks' not in dictionary[task['parent_key']]:
-                dictionary[task['parent_key']].setdefault('sub_tasks', [])
-            dictionary[task['parent_key']]['sub_tasks'].append(task)
-        else:
-            dictionary[task['key']] = task
+        if 'assignee_display_name' in task:
+            if task['assignee_display_name'] not in dictionary:
+                executor = dict()
+                executor['assignee_display_name'] = task['assignee_display_name']
+                executor['tasks'] = dict()
+                dictionary[task['assignee_display_name']] = executor
+            if 'parent_key' in task:
+                if task['parent_key'] not in dictionary[task['assignee_display_name']]['tasks']:
+                    parent_task = dict()
+                    parent_task['key'] = task['parent_key']
+                    parent_task['summary'] = task['parent_summary']
+                    parent_task['status_name'] = task['parent_status']
+                    dictionary[task['assignee_display_name']]['tasks'][task['parent_key']] = parent_task
+                if 'sub_tasks' not in dictionary[task['assignee_display_name']]['tasks'][task['parent_key']]:
+                    dictionary[task['assignee_display_name']]['tasks'][task['parent_key']].setdefault('sub_tasks', [])
+                dictionary[task['assignee_display_name']]['tasks'][task['parent_key']]['sub_tasks'].append(task)
+            else:
+                dictionary[task['assignee_display_name']]['tasks'][task['key']] = task
+
+    for key in dictionary:
+        if 'tasks' in dictionary[key]:
+            dictionary[key]['tasks'] = list(dictionary[key]['tasks'].values())
 
     return list(dictionary.values())
 
 
-def sort_list_of_items(list_of_items):
+def sort_list_of_task_items(list_of_items):
     list_of_items.sort(key=lambda item: TASK_SORTING_ORDER.index(item['status_name'].upper()))
 
 
-def to_sort_tasks(tasks):
-    sort_list_of_items(tasks)
-    for task in tasks:
-        if 'sub_tasks' in task:
-            sort_list_of_items(task['sub_tasks'])
-    return tasks
+def sort_list_of_executor_items(list_of_executors):
+    list_of_executors.sort(key=lambda item: item['assignee_display_name'])
+
+
+def to_sort_tasks(executors):
+    sort_list_of_executor_items(executors)
+    for executor in executors:
+        if 'tasks' in executor:
+            sort_list_of_task_items(executor['tasks'])
+            for task in executor['tasks']:
+                if 'sub_tasks' in task:
+                    sort_list_of_task_items(task['sub_tasks'])
+    return executors
 
 
 def parse_json(text):
