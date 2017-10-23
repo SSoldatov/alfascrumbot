@@ -37,8 +37,10 @@ httpAuth = credentials.authorize(httplib2.Http())
 service = apiclient.discovery.build('sheets', 'v4', http=httpAuth)
 
 
-def get_sprint_task_statuses_without_done():
+def get_filtered_sprint_task_statuses():
     statuses = TASK_SORTING_ORDER.copy()
+    statuses.remove('BACKLOG')
+    statuses.remove('TODO')
     statuses.remove('DONE')
     return ', '.join("'{0}'".format(x) for x in statuses)
 
@@ -88,7 +90,7 @@ def get_tasks(sprint_id):
         return task_list
 
     url = GET_SPRINT_TASKS_URL.format(jira_host=JIRA_HOST, board_id=BOARD_ID, sprint_id=sprint_id,
-                                      task_statuses=get_sprint_task_statuses_without_done())
+                                      task_statuses=get_filtered_sprint_task_statuses())
     response = requests.get(url=url, auth=(JIRA_USER_NAME, JIRA_USER_PASSWORD))
     json_response = parse_json(response.text)
 
